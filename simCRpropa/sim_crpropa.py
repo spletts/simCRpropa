@@ -610,14 +610,16 @@ class SimCRPropa(object):
         self.m = ModuleList()
 
 
-        if self.Simulation.get('progation', 'CK') == 'CK':
+        if self.Simulation.get('propagation', 'CK') == 'CK':
             #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4, double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
+            logging.info("Using CK propagation module")
             self.m.add(PropagationCK(self.bField, self.Simulation['tol'],
                                      self.Simulation['minStepLength'] * pc,
                                      self.Simulation['maxStepLength'] * Mpc))
 
-        elif self.Simulation.get('progation', 'CK') == 'BP':
-            # PropagationBP(ref_ptr<MagneticField> field, double tolerance, double minStep, double maxStep)
+        elif self.Simulation.get('propagation', 'CK') == 'BP':
+            # PropagationBP(ref_ptr<Ma.gneticField> field, double tolerance, double minStep, double maxStep)
+            logging.info("Using BP propagation module")
             self.m.add(PropagationBP(self.bField, self.Simulation['tol'],
                                      self.Simulation['minStepLength'] * pc,
                                      self.Simulation['maxStepLength'] * Mpc))
@@ -709,17 +711,31 @@ class SimCRPropa(object):
             logging.info("Energy is greater than 1 EeV, limiting " \
                         "sensitivity due to memory. E = {0[Energy]:.3e}".format(self.Source))
             #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
-            self.m.add(PropagationCK(self.bField, np.max([1e-4, self.Simulation['tol']]),
-                       self.Simulation['minStepLength'] * pc,
-                       self.Simulation['maxStepLength'] * Mpc))
+            tol = np.max([1e-4, self.Simulation['tol']])
         else:
-            self.m.add(PropagationCK(self.bField, self.Simulation['tol'],
-                       self.Simulation['minStepLength'] * pc,
-                       self.Simulation['maxStepLength'] * Mpc))
+            tol = self.Simulation['tol']
             # this takes about a factor of five longer:
             #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
             # than this:
             #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
+
+        if self.Simulation.get('propagation', 'CK') == 'CK':
+            #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4, double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
+            logging.info("Using CK propagation module")
+            self.m.add(PropagationCK(self.bField, tol,
+                                     self.Simulation['minStepLength'] * pc,
+                                     self.Simulation['maxStepLength'] * Mpc))
+
+        elif self.Simulation.get('propagation', 'CK') == 'BP':
+            # PropagationBP(ref_ptr<Ma.gneticField> field, double tolerance, double minStep, double maxStep)
+            logging.info("Using BP propagation module")
+            self.m.add(PropagationBP(self.bField, tol,
+                                     self.Simulation['minStepLength'] * pc,
+                                     self.Simulation['maxStepLength'] * Mpc))
+        else:
+            raise ValueError("unknown propagation module chosen")
+
+        thinning = self.Simulation.get('thinning', 0.)
         # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
         #m.add(Redshift())
         # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
@@ -815,11 +831,11 @@ class SimCRPropa(object):
 
         if rigidity > 0.:
 
-            if rigidity > min_rigidity:
+            if rigidity > min_rigidity / 1e9:
                 raise ValueError("chosen minimal rigidity {0:.3e} GV too large for minimum chosen photon energy".format(rigidity))
 
             self.m.add(MinimumRigidity(rigidity * crpropa.giga * crpropa.volt))
-            logging.info("Set minimum rigidity to {0:.3e} GV".format(rigidity / 1e9))
+            logging.info("Set minimum rigidity to {0:.3e} GV".format(rigidity))
 
         else:
             logging.info("No cut on Rigidity set")
