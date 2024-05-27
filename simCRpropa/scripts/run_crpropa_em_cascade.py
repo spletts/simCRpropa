@@ -184,6 +184,9 @@ if __name__ == '__main__':
     config['Source']['LuminosityDistance'] = redshift2LuminosityDistance(config['Source']['z'])
     config['Source']['ComovingDistance'] = redshift2ComovingDistance(config['Source']['z'])
 
+    t00 = time.time()
+    #import tracemalloc
+    #tracemalloc.start()
     for i in range(sim.nbins):
         if not i:
             logging.info(sim.source)
@@ -210,6 +213,14 @@ if __name__ == '__main__':
         sim.m.run(sim.source,  int(sim.weights[i]), True, True)
         sim.output.close()
         logging.info("Simulating bin {0:d} / {1:d} took {2:.1f} s".format(i + 1, sim.nbins, time.time() - t0))
+
+        # check memory usage
+    #    snapshot = tracemalloc.take_snapshot() 
+    #    top_stats = snapshot.statistics('lineno') 
+    #    for stat in top_stats[:1]: 
+    #       print(stat)
+    logging.info("Total simulation took {0:.1f} s".format(time.time() - t00))
+    #tracemalloc.stop()
 
     utils.sleep(1.)
 

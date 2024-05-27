@@ -736,6 +736,7 @@ class SimCRPropa(object):
             raise ValueError("unknown propagation module chosen")
 
         thinning = self.Simulation.get('thinning', 0.)
+        logging.info("Using thinning {0}".format(thinning))
         # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
         #m.add(Redshift())
         # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
