@@ -814,7 +814,7 @@ class CascMap(object):
             width = width.to("deg")
         else:
             width *= u.deg
-        nbins = np.ceil(2. * width / 2. / binsz).astype(np.int)
+        nbins = np.ceil(2. * width / 2. / binsz).astype(int)
         edges['lon'] = np.linspace(-width.value / 2.,
                                    width.value / 2.,
                                    nbins.value + 1) * width.unit
@@ -1098,7 +1098,7 @@ class CascMap(object):
 
             # get the central pixel locations
             idx = self._casc_obs.geom.center_pix[:-1]
-            idx_int = np.ceil(idx).astype(np.int)
+            idx_int = np.ceil(idx).astype(int)
 
             # add it to the central pixel of cascade map
             # for all observed energy bins
