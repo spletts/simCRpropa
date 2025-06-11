@@ -71,7 +71,7 @@ def stack_results_lso(infile, outfile, **kwargs):
     kwargs.setdefault('entries_stack', ['X', 'Px', 'P0x'])
     kwargs.setdefault('entries_save', ['E0', 'E', 'dt', 'Protsph', 'ID', 'ID1', 'W'])
     kwargs.setdefault('use_cosmo', True)
-    kwargs.setdefault('Dsource', None)
+    kwargs.setdefault('Dsource', 0.)
 
     combined = h5py.File(infile, 'r+')
     config = yaml.safe_load(combined[kwargs['dgrp']].attrs['config'])
@@ -123,56 +123,11 @@ def stack_results_lso(infile, outfile, **kwargs):
     combined.close()
     logging.info("Done.")
 
-    # rotate positional vectors
-    logging.info("Calculating vector rotations and "\
-                 "applying cuts for jet axis and observer ...")
+    mask = parallel_transport(data, jet_opening_angle=kwargs['theta_jet'],
+                              observing_angle=kwargs['theta_obs'])
 
-    # unit vector to observer
-    try:
-        xx0norm = (data['X'] - data['X0']) / np.linalg.norm(data['X'] - data['X0'], axis=0)
-    except KeyError:
-        xx0norm = (data['X']) / np.linalg.norm(data['X'], axis=0)
-    # project momentum vector into observer's coordinate system
-    pnew = rot.project2observer(data['Px'], xx0norm, axis=0)
-    # get pnew in spherical coordinates
-    pnewsph = rot.car2sph(-pnew)
-    # project initial momentum vector into observer's coordinate system
-    p0new = rot.project2observer(data['P0x'], xx0norm, axis=0)
-    # Calculate the mask for initial momentum
-    # vectors given jet observation and opening angle
-    mask = rot.projectjetaxis(p0new,
-                              jet_opening_angle=kwargs['theta_jet'],
-                              jet_theta_angle=kwargs['theta_obs'],
-                              jet_phi_angle=0.)
-
-    data['Protsph'] = np.vstack([pnewsph[0,:],
-                                 np.rad2deg(pnewsph[2,:] * np.sin(pnewsph[1,:])),
-                                 np.rad2deg(pnewsph[2,:] * np.cos(pnewsph[1,:])) + 90.
-                                 ])
-
-    logging.info("Done.")
-
-    # compute time delay in years
-    logging.info("Calculating time delay and angular separation...")
-    # from either cosmology ...
-    if kwargs['use_cosmo']:
-        try:
-            Dsource = crpropa.redshift2ComovingDistance(config['Source']['z']) * u.m.to('Mpc')
-        except:
-            # standards in CRPropa, see
-            # https://github.com/CRPropa/CRPropa3/blob/master/include/crpropa/Cosmology.h
-            cosmo = FlatLambdaCDM(H0=67.3, Om0=0.315)
-            Dsource = cosmo.comoving_distance(config['Source']['z']).value # in Mpc
-    else:
-        # crpropa distance was saved but in m, convert to Mpc
-        if 'ComovingDistance' in config['Source']:
-            Dsource = config['Source']['ComovingDistance'] * u.m.to('Mpc')
-        else:
-            Dsource = kwargs['Dsource']
-    logging.info("Using Dsource = {0:.5e} Mpc".format(Dsource))
-
-    data['dt'] = (data['D'] - Dsource)
-    data['dt'] *= (u.Mpc.to('m') * u.m / c.c).to('yr').value
+    time_delay(config, data, use_cosmo=kwargs['use_cosmo'],
+               Dsource=kwargs['Dsource'])
 
     # save to an hdf5 file
     logging.info("Saving {0} to {1:s}...".format(kwargs['entries_save'], outfile))
@@ -193,8 +148,88 @@ def stack_results_lso(infile, outfile, **kwargs):
     h.close()
     logging.info("Done.")
 
-    data['mask'] = mask
     return data, config
+
+
+def time_delay(config, data, use_cosmo=False, Dsource=0.):
+    """
+    Compute time delay in years
+
+    :param config: dict
+        dictionary with CRPropa config
+    :param data: dict
+        dictionary with CRPropa output data
+    :param use_cosmo: bool
+        If true, compute coming distance from CRPropa library
+    :param Dsource: float
+        Use this comoving distance if use_cosmo is False and
+        no ComovingDistance given in config
+    :return:
+    Nothing, but modifies data dict
+    """
+    # compute time delay in years
+    logging.info("Calculating time delay...")
+    # from either cosmology ...
+    if use_cosmo:
+        try:
+            Dsource = crpropa.redshift2ComovingDistance(config['Source']['z']) * u.m.to('Mpc')
+        except:
+            # standards in CRPropa, see
+            # https://github.com/CRPropa/CRPropa3/blob/master/include/crpropa/Cosmology.h
+            cosmo = FlatLambdaCDM(H0=67.3, Om0=0.315)
+            Dsource = cosmo.comoving_distance(config['Source']['z']).value  # in Mpc
+    else:
+        # crpropa distance was saved but in m, convert to Mpc
+        if 'ComovingDistance' in config['Source']:
+            Dsource = config['Source']['ComovingDistance'] * u.m.to('Mpc')
+        else:
+            Dsource = Dsource
+    logging.info("Using Dsource = {0:.5e} Mpc".format(Dsource))
+    data['dt'] = (data['D'] - Dsource)
+    data['dt'] *= (u.Mpc.to('m') * u.m / c.c).to('yr').value
+
+
+def parallel_transport(data, jet_opening_angle, observing_angle=0):
+    """
+    Compute parallel transport along sphere and mask for rejecting photons
+
+    :param data: dict
+        dictionary containing the CRPropa output data.
+        Will be modified in function
+    :param jet_opening_angle: float
+        Jet opening angle (full aperture)
+    :param observing_angle: float
+        angle between jet axis and line of sight
+    :return:
+    array with mask for photons that are rejected
+    """
+    # rotate positional vectors
+    logging.info("Calculating vector rotations and " \
+                 "applying cuts for jet axis and observer ...")
+    # unit vector to observer
+    try:
+        xx0norm = (data['X'] - data['X0']) / np.linalg.norm(data['X'] - data['X0'], axis=0)
+    except KeyError:
+        xx0norm = (data['X']) / np.linalg.norm(data['X'], axis=0)
+    # project momentum vector into observer's coordinate system
+    pnew = rot.project2observer(data['Px'], xx0norm, axis=0)
+    # get pnew in spherical coordinates
+    pnewsph = rot.car2sph(-pnew)
+    # project initial momentum vector into observer's coordinate system
+    p0new = rot.project2observer(data['P0x'], xx0norm, axis=0)
+    # Calculate the mask for initial momentum
+    # vectors given jet observation and opening angle
+    mask = rot.projectjetaxis(p0new,
+                              jet_opening_angle=jet_opening_angle,
+                              jet_theta_angle=observing_angle,
+                              jet_phi_angle=0.)
+    data['mask'] = mask
+    data['Protsph'] = np.vstack([pnewsph[0, :],
+                                 np.rad2deg(pnewsph[2, :] * np.sin(pnewsph[1, :])),
+                                 np.rad2deg(pnewsph[2, :] * np.cos(pnewsph[1, :])) + 90.
+                                 ])
+    logging.info("Done.")
+    return mask
 
 
 class HistPrimary(object):
@@ -454,7 +489,7 @@ class CascMap(object):
         # simplifying and discretizing the remaining integral, one finds for the average flux
         # \sum_i weights(t_i) K(t_i) \Delta t_i
         # this calculation is performed by the next two lines:
-        self._casc_map = self._m * \
+        self._casc_map = self._m.copy() * \
                          weights[:, np.newaxis, np.newaxis, np.newaxis, np.newaxis]
 
         self._casc = self._casc_map.sum_over_axes(['t_delay'], keepdims=False)
@@ -566,7 +601,9 @@ class CascMap(object):
                       binsz=0.02,
                       id_detection=22,
                       lightcurve=None,
-                      smooth_kwargs={'kernel': Tophat2DKernel, 'threshold': 4, 'steps': 50}
+                      smooth_kwargs={'kernel': Tophat2DKernel, 'threshold': 4, 'steps': 50},
+                      tmin_cut=None,
+                      tmax_cut=None
                       ):
         # TODO allow to supply map WCS geometry?
         # TODO include some print / logging statements
@@ -623,7 +660,10 @@ class CascMap(object):
                                                                       values,
                                                                       id_detection=id_detection,
                                                                       id_injected=config['Source']['Composition'],
-                                                                      config=config)
+                                                                      config=config,
+                                                                      tmin_cut=tmin_cut,
+                                                                      tmax_cut=tmax_cut
+                                                                      )
 
         # divide histogram by injected number of particles
         hist_casc /= n_injected_particles[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis]
@@ -791,7 +831,8 @@ class CascMap(object):
         return binsz, config, edges, n_injected_particles, values, width
 
     @staticmethod
-    def build_nd_histogram(edges, values, config=None, id_detection=22, id_injected=None):
+    def build_nd_histogram(edges, values, config=None,
+                           id_detection=22, id_injected=None, tmin_cut=None, tmax_cut=None):
         """
         Build an n x d dimensional histogram from cascade simulations
 
@@ -817,6 +858,15 @@ class CascMap(object):
         else:
             mc = (values['id_obs'] == id_detection) & \
                  (values['id_parent'] != id_injected)
+
+        if tmin_cut is not None:
+            mc &= values['t_delay'] >= tmin_cut.to(u.yr).value
+            logging.warning(f"cutting cascade photons with time delay < {tmin_cut}")
+
+        if tmax_cut is not None:
+            mc &= values['t_delay'] <= tmax_cut.to(u.yr).value
+            logging.warning(f"cutting cascade photons with time delay > {tmax_cut}")
+
         # build data cube for cascade
         if np.sum(mc):
             data_casc = np.array([values[k][mc] for k in edges.keys()])
