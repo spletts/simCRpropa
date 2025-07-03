@@ -346,6 +346,7 @@ class SimCRPropa(object):
         self.electronoutputfile = str(path.join(self.FileIO['outdir'], self.ElectronOutName))
         # Make directory within self.ElectronOutName if it doesn't exist
         os.makedirs(os.path.dirname(self.electronoutputfile), exist_ok=True)
+        # TODO convert to hd5f
 
         logging.info("outdir: {0[outdir]:s}".format(self.FileIO))
         logging.info(f"outfile: {self.photonoutputfile}")
@@ -836,6 +837,7 @@ class SimCRPropa(object):
         self._create_photon_observer()
         if self.Observer["obsElectrons"]:
             self._create_electron_positron_observer()
+            logging.info("Setup electron observer")
         self._setup_break()
         return 
 
@@ -865,14 +867,14 @@ class SimCRPropa(object):
                         self.D = redshift2ComovingDistance(self.Source['z']) # comoving source distance
                         self.setOutput(0, idB=ib, idL=il, it=it, iz=iz)
 
-                        outfile = path.join(self.FileIO['outdir'], self.PhotonOutName.split('_')[0] + '*.hdf5')
-                        missing = utils.missing_files(outfile,njobs, split = '.hdf5')
+                        photonoutfile = path.join(self.FileIO['outdir'], self.PhotonOutName.split('_')[0] + '*.hdf5')
+                        missing = utils.missing_files(photonoutfile,njobs, split = '.hdf5')
                         self.config['Simulation']['n_cpu'] = kwargs['n']
 
                         if len(missing) < njobs:
                             logging.debug(f'here {njobs}')
                             njobs = missing
-                            logging.info(f'there are {len(missing)} files missing in {outfile}')
+                            logging.info(f'there are {len(missing)} files missing in {photonoutfile}')
 
                         if len(missing) and not force_combine:
                             self.config['configname'] = 'r'
@@ -902,14 +904,14 @@ class SimCRPropa(object):
                             else:
                                 logging.info("All files present.")
 
-                            ffdat = glob(path.join(path.dirname(outfile),
-                                               path.basename(outfile).split('.hdf5')[0] + '.dat'))
+                            ffdat = glob(path.join(path.dirname(photonoutfile),
+                                               path.basename(photonoutfile).split('.hdf5')[0] + '.dat'))
                             if len(ffdat):
                                 logging.info("Deleting *.dat files.")
                                 for f in ffdat:
                                     utils.rm(f)
 
-                            collect.combine_output(outfile, overwrite=overwrite_combine)
+                            collect.combine_output(photonoutfile, overwrite=overwrite_combine)
         return
 
 @lsf.setLsf
