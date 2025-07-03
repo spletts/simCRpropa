@@ -18,6 +18,8 @@ from crpropa import *
 from psutil import virtual_memory
 from subprocess import call, check_call, Popen, PIPE, check_output, CalledProcessError
 import sys
+import shutil
+
 
 def init_lsf(local_id=0):
     """
@@ -229,7 +231,7 @@ if __name__ == '__main__':
     # read the output
     if outtype == 'ascii':
         logging.info(f"Processing {ph_outputfile}")
-        names, units, ph_data = readCRPropaOutput(ph_outputfile)
+        names, units, ph_data, _ = readCRPropaOutput(ph_outputfile)
         ph_hfile = ph_outputfile.split(".dat")[0] + ".hdf5"
 
         col.convertOutput2Hdf5(names, units, ph_data, weights, ph_hfile, config,
@@ -245,7 +247,7 @@ if __name__ == '__main__':
 
     utils.sleep(1.)
 
-    # Convert electron text output to hdf5
+    # Convert electron observer text output to hdf5
     if config['Observer']['obsElectrons']:
         e_outputfile = str(deepcopy(sim.electronoutputfile))
         e_outdir = os.path.join(ph_outdir, "electrons_positrons")
@@ -254,14 +256,30 @@ if __name__ == '__main__':
         if outtype == 'ascii':
             e_hfile = e_outputfile.split(".dat")[0] + ".hdf5"
             logging.info(f"Processing {e_outputfile} to {e_hfile} in {e_outdir}")
-            names, units, e_data = readCRPropaOutput(e_outputfile)
+            names, units, e_data, is_empty = readCRPropaOutput(e_outputfile)
 
-            col.convertOutput2Hdf5(names, units, e_data, weights, e_hfile, config,
-                    pvec_id = ['','0'],
-                    xvec_id = ['','0'],
-                    useSpectrum = useSpectrum)
+            # Remove everything from this directory. Issues with timestamps on empty files not matching the time of the copied file, when using utils.copy2scratch and shutils.copy2.
+            # e.g. file1 copied to dir2 produced different times via ls -ltr file1 and ls -ltr dir1/file1. 
+            # Confirmed this behavior at the command line when cp file1 dir1 where the files are empty. Removing dir1/file1 then recopying produced the expected results (same time stamps)
+            # The electron files are sometimes empty.
+            for file in glob(path.join(e_outdir, "*dat")):
+                    logging.info(f"Removing {file}")
+                    os.remove(file)
+            for file in glob(path.join(e_outdir, "*hdf5")):
+                    logging.info(f"Removing {file}")
+                    os.remove(file)
 
-            #utils.zipfiles(sim.outputfile,sim.outputfile + '.gz', nodir = True)
-            utils.copy2scratch(e_hfile, e_outdir)
+            if is_empty is False:
+                # Create hdf5 file
+                col.convertOutput2Hdf5(names, units, e_data, weights, e_hfile, config,
+                        pvec_id = ['','0'],
+                        xvec_id = ['','0'],
+                        useSpectrum = useSpectrum)
+
+                utils.copy2scratch(e_hfile, e_outdir)
+
+            else:
+                # Copy/preserve (empty) text file(s)
+                utils.copy2scratch(e_outputfile, e_outdir)
 
     utils.sleep(1.)

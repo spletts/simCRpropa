@@ -535,7 +535,7 @@ class SimCRPropa(object):
             obsPosition = Vector3d(self.Observer['obsPosX'],self.Observer['obsPosY'],self.Observer['obsPosZ'])
             # obs position same as source position for LargeSphere Observer
             self.source.add(SourcePosition(obsPosition))
-            # emission cone towards positiv x-axis
+            # emission cone towards positive x-axis
             if self.Source.get('source_morphology', 'cone') == 'cone':
                 self.source.add(SourceEmissionCone(
                     Vector3d(np.cos(np.radians(self.Observer['obsAngle'])), 
@@ -545,8 +545,8 @@ class SimCRPropa(object):
                 self.source.add(SourceIsotropicEmission())
             elif self.Source.get('source_morphology', 'cone') == 'dir':
                 self.source.add(SourceDirection(
-                                    Vector3d(np.cos(np.pi - np.radians(self.Observer['obsAngle'])), 
-                                        np.sin(np.pi - np.radians(self.Observer['obsAngle'])), 0)
+                                    Vector3d(np.cos(np.radians(self.Observer['obsAngle'])), 
+                                        np.sin(np.radians(self.Observer['obsAngle'])), 0)
                                     ))
             else:
                 raise ValueError("Chosen source morphology not supported.")
@@ -776,7 +776,7 @@ class SimCRPropa(object):
         self.m.add(self.photon_observer)
         if self.Observer["obsElectrons"]:
             self.m.add(self.electron_observer)
-        # stop tracing particle once it's propagation is longer than Dmax
+        # stop tracing particle once its propagation is longer than Dmax
         # or 1.5 * comoving distance of distance > 100. Mpc. 
         # this would anyway correspond to a very long time delay of > 50. Mpc / c
         #if self.D / Mpc > 100.:

@@ -343,40 +343,49 @@ def readCRPropaOutput(filename):
     units = OrderedDict()
     data = np.loadtxt(filename)
 
-    with open(filename) as h:
-        for i,l in enumerate(h.readlines()):
-            if not l[0] == '#': continue
-            if not len(l.split()): continue
-            if not i:
-                names = l.lstrip('#').split() # get the name columns
-            # extract units
-            if l.split()[-1].find(']') >= 0:
-                par = l.lstrip('#').split()[0][0]
-                if float(l.split()[-2].strip('[')) == 1.:
-                    units[par] = '{0:s}'.format(l.split()[-1].strip(']'))
-                else:
-                    units[par] = '{0:s} {1:s}'.format(l.split()[-2].strip('['),l.split()[-1].strip(']'))
+    # Check if file is empty. For electron observer, it might be. 
+    # If it is empty for photon observer, there is a problem in the simulation setup (e.g. break conditions)
+    if data.size == 0:
+        logging.warning(f"File empty: {filename}")
+        is_empty = True
+        names, units, data = None, None, None
+    else:
+        is_empty = False
 
-        if 'X' in units.keys(): 
-            for par in ['Y','Z']:
-                units[par] = units['X']
-        for i in range(2):
-            if 'X{0:n}'.format(i) in names:
-                for par in ['X{0:n}'.format(i), 'Y{0:n}'.format(i),'Z{0:n}'.format(i)]:
+        with open(filename) as h:
+            for i,l in enumerate(h.readlines()):
+                if not l[0] == '#': continue
+                if not len(l.split()): continue
+                if not i:
+                    names = l.lstrip('#').split() # get the name columns
+                # extract units
+                if l.split()[-1].find(']') >= 0:
+                    par = l.lstrip('#').split()[0][0]
+                    if float(l.split()[-2].strip('[')) == 1.:
+                        units[par] = '{0:s}'.format(l.split()[-1].strip(']'))
+                    else:
+                        units[par] = '{0:s} {1:s}'.format(l.split()[-2].strip('['),l.split()[-1].strip(']'))
+
+            if 'X' in units.keys(): 
+                for par in ['Y','Z']:
                     units[par] = units['X']
-            if 'E{0:n}'.format(i) in names:
-                units['E{0:n}'.format(i)] = units['E']
+            for i in range(2):
+                if 'X{0:n}'.format(i) in names:
+                    for par in ['X{0:n}'.format(i), 'Y{0:n}'.format(i),'Z{0:n}'.format(i)]:
+                        units[par] = units['X']
+                if 'E{0:n}'.format(i) in names:
+                    units['E{0:n}'.format(i)] = units['E']
 
-        formats = []
-        for i,n in enumerate(names):
-            if n.find('ID') >= 0:
-                formats.append('I')
-            else:
-                formats.append('D')
-            if not n in units.keys():
-                units[n] = ''
+            formats = []
+            for i,n in enumerate(names):
+                if n.find('ID') >= 0:
+                    formats.append('I')
+                else:
+                    formats.append('D')
+                if not n in units.keys():
+                    units[n] = ''
 
-    return names, units, data
+    return names, units, data, is_empty
 
 
 class EMHist(object):
