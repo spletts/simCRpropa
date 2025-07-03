@@ -162,51 +162,6 @@ defaults = """
 FileIO:
     outdir: ./
 
-Simulation:
-    multiplicity: 100 # number of times Nbatch particles are simulated
-    Nbatch: 1.e+4 # number of particles simulated in each simulation
-    cpu_n: 8
-
-Cosmology:
-    h: 0.7
-    Om: 0.3
-
-Source:
-    z: 0.14 # source redshift, source position is at (D,0,0)
-    Energy: 1.e+13 # energy of single particle in eV
-    th_jet: 5. # jet opening angle in degrees, emission in -x direction
-    Emin: 100.e+9 # minimum source energy if spectrum is used, in eV
-    Emax: 20.e+12 # maximum source energy if spectrum is used, in eV
-    Esteps: 20 # maximum source energy if spectrum is used, in eV
-    index: -1.5 # source spectral index
-    cutoff: 10. #cutoff energy in TeV
-    useSpectrum: True # if True, simulate spectrum, otherwise inject delta function with energy E
-    Spectrum: "E^{0[index]:.3f}*exp(-E/({0[cutoff]:.2f} * TeV))"
-
-Observer:
-    obsPosX: 0. # observer's x coordinate
-    obsPosY: 0. # observer's y coordinate
-    obsPosZ: 0. # observer's z coordinate
-    obsAngle: 0. # angle w.r.t. to jet axis, if non-zero, overwrites source position
-    th_jet: 5. # jet opening angle in degrees, emission in -x direction
-    zmin: 1.e-3 # minimum redshift for detection ~ 14 Mpc
-    obsSize: 10. # size of observer's small sphere in Mpc
-    obsSmallSphere: True # use small sphere observer, otherwise use large sphere observer
-
-BreakConditions:
-    Dmax: 1. # maximum distance of particle for tracing
-    Emin: 1.e+9 # minimum energy for particle tracing
-
-Bfield:
-    B: 1.e-16 # rms of B field in Gauss
-    seed: 2308 # random seed for B field
-    type: cell # either cell or turbulence
-    NBgrid: 200 # number of B-field cells (turbulent field only)
-    boxSize: 100 # box size for vector grid in Mpc (turbulent field only)
-    maxTurbScale: 50. # maximum turbulence scale in Mpc / cell size for cell-like field
-    turbIndex: -3.667 # turbulence index, default - 11/3
-    periodicity: 4000. # length of periodic box in Mpc
-    EBL: IRB_Gilmore12
 """
 
 class SimCRPropa(object):
