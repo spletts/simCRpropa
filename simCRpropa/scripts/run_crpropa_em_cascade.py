@@ -165,6 +165,9 @@ if __name__ == '__main__':
     sim.photonoutputfile = str(path.join(tmpdir, path.basename(sim.photonoutputfile)))
     logging.info(f"writing output file to : {sim.photonoutputfile}")
     logging.info(f"and will copy it to : {sim.FileIO['outdir']}")
+
+    if config['Observer']["obsElectrons"]:
+        sim.electronoutputfile = str(path.join(tmpdir, path.basename(sim.electronoutputfile)))
     sim.setup()
 
 #    weights = sim.Simulation['Nbatch'] * \
@@ -214,27 +217,51 @@ if __name__ == '__main__':
 
     utils.sleep(1.)
 
-    outputfile = str(deepcopy(sim.photonoutputfile))
-    outdir = deepcopy(sim.FileIO['outdir'])
+    # For photons
+    ph_outputfile = str(deepcopy(sim.photonoutputfile))
+    ph_outdir = deepcopy(sim.FileIO['outdir'])
     useSpectrum = deepcopy(sim.Source['useSpectrum'])
     weights = deepcopy(sim.weights)
     outtype = deepcopy(sim.Simulation.get('outputtype', 'ascii'))
-    del sim # free memorY
+    if config['Observer']['obsElectrons'] is False:
+        del sim # free memory
 
     # read the output
     if outtype == 'ascii':
-        names, units, data = readCRPropaOutput(outputfile)
-        hfile = outputfile.split(".dat")[0] + ".hdf5"
+        logging.info(f"Processing {ph_outputfile}")
+        names, units, ph_data = readCRPropaOutput(ph_outputfile)
+        ph_hfile = ph_outputfile.split(".dat")[0] + ".hdf5"
 
-        col.convertOutput2Hdf5(names, units, data, weights, hfile, config,
+        col.convertOutput2Hdf5(names, units, ph_data, weights, ph_hfile, config,
                   pvec_id = ['','0'],
                   xvec_id = ['','0'],
                   useSpectrum = useSpectrum)
 
         #utils.zipfiles(sim.outputfile,sim.outputfile + '.gz', nodir = True)
-        utils.copy2scratch(hfile, outdir)
+        utils.copy2scratch(ph_hfile, ph_outdir)
 
     else:
-        utils.copy2scratch(outputfile, outdir)
+        utils.copy2scratch(ph_outputfile, ph_outdir)
+
+    utils.sleep(1.)
+
+    # Convert electron text output to hdf5
+    if config['Observer']['obsElectrons']:
+        e_outputfile = str(deepcopy(sim.electronoutputfile))
+        e_outdir = os.path.join(ph_outdir, "electrons_positrons")
+        del sim
+        # read the output
+        if outtype == 'ascii':
+            e_hfile = e_outputfile.split(".dat")[0] + ".hdf5"
+            logging.info(f"Processing {e_outputfile} to {e_hfile} in {e_outdir}")
+            names, units, e_data = readCRPropaOutput(e_outputfile)
+
+            col.convertOutput2Hdf5(names, units, e_data, weights, e_hfile, config,
+                    pvec_id = ['','0'],
+                    xvec_id = ['','0'],
+                    useSpectrum = useSpectrum)
+
+            #utils.zipfiles(sim.outputfile,sim.outputfile + '.gz', nodir = True)
+            utils.copy2scratch(e_hfile, e_outdir)
 
     utils.sleep(1.)

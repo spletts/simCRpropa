@@ -302,9 +302,6 @@ class SimCRPropa(object):
             self.PhotonOutName = 'casc_{0:05d}.hdf5'.format(jobid)
         else:
             raise ValueError("unknown output type chosen")
-        
-        # For electron observer
-        self.ElectronOutName = os.path.join(f"electrons_positrons", self.PhotonOutName)
 
         self.Source['th_jet'] = self._th_jetList[it]
         self.Source['z'] = self._zList[iz]
@@ -343,14 +340,14 @@ class SimCRPropa(object):
 
         self.photonoutputfile = str(path.join(self.FileIO['outdir'], self.PhotonOutName))
 
-        self.electronoutputfile = str(path.join(self.FileIO['outdir'], self.ElectronOutName))
-        # Make directory within self.ElectronOutName if it doesn't exist
-        os.makedirs(os.path.dirname(self.electronoutputfile), exist_ok=True)
-        # TODO convert to hd5f
+        if self.Observer["obsElectrons"]:
+            self.electronoutputfile = str(path.join(self.FileIO['outdir'], "electrons_positrons", f"e_{self.PhotonOutName}"))
+            # Make directory if it doesn't exist
+            os.makedirs(os.path.dirname(self.electronoutputfile), exist_ok=True)
 
         logging.info("outdir: {0[outdir]:s}".format(self.FileIO))
-        logging.info(f"outfile: {self.photonoutputfile}")
-        logging.info(f"outfile for electrons and positrons: {self.electronoutputfile }")
+        logging.info(f"outfile for photons: {self.photonoutputfile}")
+        
         return
 
     def _create_bfield(self):
@@ -437,7 +434,7 @@ class SimCRPropa(object):
         #ObserverNucleusVeto
         #ObserverTimeEvolution
 
-        logging.info(f'Saving output to {self.electronoutputfile}')
+        logging.info(f'Saving electron output to {self.electronoutputfile}')
         if self.Simulation.get('outputtype', 'ascii') == 'ascii':
             self.electron_output = TextOutput(self.electronoutputfile,
                                      Output.Event3D)
@@ -470,7 +467,7 @@ class SimCRPropa(object):
         self.electron_output.setEnergyScale(eV)
         self.electron_observer.onDetection(self.electron_output)
 
-        logging.info('Observer and output initialized')
+        logging.info('Electron observer and output initialized')
         return
 
     
@@ -493,7 +490,7 @@ class SimCRPropa(object):
         #ObserverNucleusVeto
         #ObserverTimeEvolution
 
-        logging.info(f'Saving output to {self.photonoutputfile}')
+        logging.info(f'Saving photon output to {self.photonoutputfile}')
         if self.Simulation.get('outputtype', 'ascii') == 'ascii':
             self.photon_output = TextOutput(self.photonoutputfile,
                                      Output.Event3D)
@@ -526,7 +523,7 @@ class SimCRPropa(object):
         self.photon_output.setEnergyScale(eV)
         self.photon_observer.onDetection(self.photon_output)
 
-        logging.info('Observer and output initialized')
+        logging.info('Photon observer and output initialized')
         return
 
 
