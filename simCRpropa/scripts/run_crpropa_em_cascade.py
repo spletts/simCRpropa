@@ -197,8 +197,7 @@ if __name__ == '__main__':
             sim.Source['Energy'] = sim.EeV[i]
             logging.info("======= Bin {0:d} / {1:d}, Energy : {2:3e} eV ========".format(
                 i + 1, sim.nbins, sim.EeV[i]))
-        logging.info("Running simulation for {1:d} particle(s), saving output to {0:s}".format(sim.outputfile,
-                sim.weights[i]))
+        logging.info(f"Running simulation for {sim.weights[i]} particle(s), saving output to {sim.outputfile}")
 
         t0 = time.time()
 
