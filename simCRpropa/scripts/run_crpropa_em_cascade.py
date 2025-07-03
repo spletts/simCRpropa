@@ -162,22 +162,13 @@ if __name__ == '__main__':
     os.environ['OMP_NUM_THREADS'] = str(sim.Simulation['cpu_n'])
 
     sim.setOutput(job_id)
-    sim.outputfile = str(path.join(tmpdir, path.basename(sim.outputfile)))
-    logging.info(f"writing output file to : {sim.outputfile}")
+    sim.photonoutputfile = str(path.join(tmpdir, path.basename(sim.photonoutputfile)))
+    logging.info(f"writing output file to : {sim.photonoutputfile}")
     logging.info(f"and will copy it to : {sim.FileIO['outdir']}")
     sim.setup()
 
 #    weights = sim.Simulation['Nbatch'] * \
 #        np.ones(nbins, dtype = np.int) # weight with optical depth?
-#    if sim.config['Observer']['obsSmallSphere']:
-#        # weight for Bfield
-#        if sim.config['Bfield']['B'] > 1e-18:
-#            weights *= (1. + 0.1 * (np.log10(sim.config['Bfield']['B']) + 18.)**2.)
-#        # weight for jet opening angle 
-#        if sim.config['Source']['th_jet'] > 1.:
-#            weights *= (1. + 0.1 *sim.config['Source']['th_jet']**2.)
-#        if sim.config['Observer']['obsAngle'] > 0.:
-#            weights *= (1. + 0.1 * (sim.config['Observer']['obsAngle'] + 1.))
 #    logging.info(f'weights: {weights}')
 
     # add distances to config
@@ -192,12 +183,12 @@ if __name__ == '__main__':
         if not i:
             logging.info(sim.source)
             logging.info(sim.m)
-            logging.info(sim.observer)
+            logging.info(sim.photon_observer)
 
         if not sim.Source['useSpectrum']:
             sim.Source['Energy'] = sim.EeV[i]
             logging.info(f"======= Bin {i + 1} / {sim.nbins}, Energy : {sim.EeV[i]} eV ========")
-        logging.info(f"Running simulation for {sim.weights[i]} particle(s), saving output to {sim.outputfile}")
+        logging.info(f"Running simulation for {sim.weights[i]} particle(s), saving output to {sim.photonoutputfile}")
 
         t0 = time.time()
 
@@ -210,7 +201,7 @@ if __name__ == '__main__':
 
         # void run(SourceInterface *source, size_t count, bool recursive = true, bool secondariesFirst = false)
         sim.m.run(sim.source,  int(sim.weights[i]), True, True)
-        sim.output.close()
+        sim.photon_output.close()
         logging.info(f"Simulating bin {i + 1} / {sim.nbins} took {time.time() - t0} s")
 
         # check memory usage
@@ -223,7 +214,7 @@ if __name__ == '__main__':
 
     utils.sleep(1.)
 
-    outputfile = str(deepcopy(sim.outputfile))
+    outputfile = str(deepcopy(sim.photonoutputfile))
     outdir = deepcopy(sim.FileIO['outdir'])
     useSpectrum = deepcopy(sim.Source['useSpectrum'])
     weights = deepcopy(sim.weights)

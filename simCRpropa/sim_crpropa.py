@@ -17,6 +17,7 @@ import socket
 from simCRpropa import collect
 from collections import OrderedDict
 import h5py
+import os
 
 @lsf.setLsf
 def _submit_run_lsf(script, config, option, njobs, **kwargs):
@@ -161,7 +162,6 @@ def build_histogram_obs(combined, config, obs = 22., Ebins = np.array([])):
 defaults = """
 FileIO:
     outdir: ./
-
 """
 
 class SimCRPropa(object):
@@ -259,17 +259,6 @@ class SimCRPropa(object):
                 self.weights = np.array(self.Simulation["Nbatch"])
                 self.EeV = np.sqrt(np.prod(self.EeVbins, axis=0))
 
-            # increase number of weights for small scale observer
-            if self.Observer['obsSmallSphere']:
-                # weight for Bfield
-                if self.Bfield['B'] > 1e-18:
-                    self.weights *= (1. + 0.1 * (np.log10(self.Bfield['B']) + 18.)**2.)
-                # weight for jet opening angle 
-                if self.Source['th_jet'] > 1.:
-                    self.weights *= (1. + 0.1 *self.Source['th_jet']**2.)
-                if self.Observer['obsAngle'] > 0.:
-                    self.weights *= (1. + 0.1 * (self.Observer['obsAngle'] + 1.))
-
             self.weights = self.weights.astype(int)
             self.nbins = self.EeV.size
             self.Source['Energy'] = self.EeV[0]
@@ -308,11 +297,14 @@ class SimCRPropa(object):
     def setOutput(self,jobid, idB=0, idL=0, it=0, iz=0):
         """Set output file and directory"""
         if self.Simulation.get('outputtype', 'ascii') == 'ascii':
-            self.OutName = 'casc_{0:05d}.dat'.format(jobid)
+            self.PhotonOutName = 'casc_{0:05d}.dat'.format(jobid)
         elif self.Simulation.get('outputtype', 'ascii') == 'hdf5':
-            self.OutName = 'casc_{0:05d}.hdf5'.format(jobid)
+            self.PhotonOutName = 'casc_{0:05d}.hdf5'.format(jobid)
         else:
             raise ValueError("unknown output type chosen")
+        
+        # For electron observer
+        self.ElectronOutName = os.path.join(f"electrons_positrons", self.PhotonOutName)
 
         self.Source['th_jet'] = self._th_jetList[it]
         self.Source['z'] = self._zList[iz]
@@ -349,9 +341,15 @@ class SimCRPropa(object):
         else:
             raise ValueError("Bfield type must be either 'cell' or 'turbulence' not {0[type]}".format(self.Bfield))
 
-        self.outputfile = str(path.join(self.FileIO['outdir'], self.OutName))
+        self.photonoutputfile = str(path.join(self.FileIO['outdir'], self.PhotonOutName))
+
+        self.electronoutputfile = str(path.join(self.FileIO['outdir'], self.ElectronOutName))
+        # Make directory within self.ElectronOutName if it doesn't exist
+        os.makedirs(os.path.dirname(self.electronoutputfile), exist_ok=True)
+
         logging.info("outdir: {0[outdir]:s}".format(self.FileIO))
-        logging.info("outfile: {0:s}".format(self.outputfile))
+        logging.info(f"outfile: {self.photonoutputfile}")
+        logging.info(f"outfile for electrons and positrons: {self.electronoutputfile }")
         return
 
     def _create_bfield(self):
@@ -421,89 +419,121 @@ class SimCRPropa(object):
             pass
         logging.info(f'B(10 Mpc, 0, 0)={self.bField.getField(Vector3d(10,0,0) * Mpc) / nG} nG')
         return
+    
 
-    def _create_observer(self):
-        """Set up the observer for the simulation"""
+    def _create_electron_positron_observer(self):
+        """Set up the observer for the simulation. Observe electrons and positrons."""
         obsPosition = Vector3d(self.Observer['obsPosX'],self.Observer['obsPosY'],self.Observer['obsPosZ'])
-        self.observer = Observer()
-        #ObserverSmallSphere (Vector3d center=Vector3d(0.), double radius=0)
-        #Detects particles upon entering a sphere
-        if self.Observer['obsSmallSphere']:
-            self.observer.add(ObserverSmallSphere(obsPosition, self.Observer['obsSize'] * Mpc))
-        else:
-            # also possible: detect particles upon exiting a shpere: 
-            # ObserverLargeSphere (Vector3d center=Vector3d(0.), double radius=0)
-            # radius is of large sphere is equal to source distance
-            #self.observer.add(ObserverLargeSphere(obsPosition, self.D))
-            self.observer.add(ObserverSurface(Sphere(obsPosition, self.D)))
-        # looses a lot of particles -- need periodic boxes
-        #Detects particles in a given redshift window. 
-        #self.observer.add(ObserverRedshiftWindow(-1. * self.Observer['zmin'], self.Observer['zmin']))
-        self.observer.add(ObserverElectronVeto())
+        self.electron_observer = Observer()
+        # also possible: detect particles upon exiting a shpere: 
+        # ObserverLargeSphere (Vector3d center=Vector3d(0.), double radius=0)
+        # radius is of large sphere is equal to source distance
+        self.electron_observer.add(ObserverSurface(Sphere(obsPosition, self.D)))
+        self.electron_observer.add(ObserverPhotonVeto())
 
         # for CR secondaries testing
-        self.observer.add(ObserverNucleusVeto())
+        self.electron_observer.add(ObserverNucleusVeto())
         #ObserverNucleusVeto
         #ObserverTimeEvolution
 
-        logging.info(f'Saving output to {self.outputfile}')
+        logging.info(f'Saving output to {self.electronoutputfile}')
         if self.Simulation.get('outputtype', 'ascii') == 'ascii':
-            self.output = TextOutput(self.outputfile,
+            self.electron_output = TextOutput(self.electronoutputfile,
                                      Output.Event3D)
         elif self.Simulation.get('outputtype', 'ascii') == 'hdf5':
-            self.output = HDF5Output(self.outputfile,
+            self.electron_output = HDF5Output(self.electronoutputfile,
                                      Output.Event3D)
         else:
             raise ValueError("unknown output type chosen")
 
-        self.output.enable(Output.CurrentIdColumn)
-        self.output.enable(Output.CurrentDirectionColumn)
-        self.output.enable(Output.CurrentEnergyColumn)
-        self.output.enable(Output.CurrentPositionColumn)
-        self.output.enable(Output.CreatedIdColumn)
-        self.output.enable(Output.SourceEnergyColumn)
-        self.output.enable(Output.TrajectoryLengthColumn)
-        self.output.enable(Output.SourceDirectionColumn)
-        self.output.enable(Output.SourcePositionColumn)
-        self.output.enable(Output.WeightColumn)
+        self.electron_output.enable(Output.CurrentIdColumn)
+        self.electron_output.enable(Output.CurrentDirectionColumn)
+        self.electron_output.enable(Output.CurrentEnergyColumn)
+        self.electron_output.enable(Output.CurrentPositionColumn)
+        self.electron_output.enable(Output.CreatedIdColumn)
+        self.electron_output.enable(Output.SourceEnergyColumn)
+        self.electron_output.enable(Output.TrajectoryLengthColumn)
+        self.electron_output.enable(Output.SourceDirectionColumn)
+        self.electron_output.enable(Output.SourcePositionColumn)
+        self.electron_output.enable(Output.WeightColumn)
 
-        self.output.disable(Output.RedshiftColumn)
-        self.output.disable(Output.CreatedDirectionColumn)
-        self.output.disable(Output.CreatedEnergyColumn)
-        self.output.disable(Output.CreatedPositionColumn)
-        self.output.disable(Output.SourceIdColumn)
+        self.electron_output.disable(Output.RedshiftColumn)
+        self.electron_output.disable(Output.CreatedDirectionColumn)
+        self.electron_output.disable(Output.CreatedEnergyColumn)
+        self.electron_output.disable(Output.CreatedPositionColumn)
+        self.electron_output.disable(Output.SourceIdColumn)
         # we need this column for the blazar jet, don't disable
         #self.output.disable(Output.SourcePositionColumn)
 
 
-        self.output.setEnergyScale(eV)
-        self.observer.onDetection(self.output)
+        self.electron_output.setEnergyScale(eV)
+        self.electron_observer.onDetection(self.electron_output)
 
         logging.info('Observer and output initialized')
         return
+
+    
+
+    def _create_photon_observer(self):
+        """Set up the observer for the simulation. Observe photons only"""
+        obsPosition = Vector3d(self.Observer['obsPosX'],self.Observer['obsPosY'],self.Observer['obsPosZ'])
+        self.photon_observer = Observer()
+        # also possible: detect particles upon exiting a shpere: 
+        # ObserverLargeSphere (Vector3d center=Vector3d(0.), double radius=0)
+        # radius is of large sphere is equal to source distance
+        self.photon_observer.add(ObserverSurface(Sphere(obsPosition, self.D)))
+        # looses a lot of particles -- need periodic boxes
+        #Detects particles in a given redshift window. 
+        #self.observer.add(ObserverRedshiftWindow(-1. * self.Observer['zmin'], self.Observer['zmin']))
+        self.photon_observer.add(ObserverElectronVeto())
+
+        # for CR secondaries testing
+        self.photon_observer.add(ObserverNucleusVeto())
+        #ObserverNucleusVeto
+        #ObserverTimeEvolution
+
+        logging.info(f'Saving output to {self.photonoutputfile}')
+        if self.Simulation.get('outputtype', 'ascii') == 'ascii':
+            self.photon_output = TextOutput(self.photonoutputfile,
+                                     Output.Event3D)
+        elif self.Simulation.get('outputtype', 'ascii') == 'hdf5':
+            self.photon_output = HDF5Output(self.photonoutputfile,
+                                     Output.Event3D)
+        else:
+            raise ValueError("unknown output type chosen")
+
+        self.photon_output.enable(Output.CurrentIdColumn)
+        self.photon_output.enable(Output.CurrentDirectionColumn)
+        self.photon_output.enable(Output.CurrentEnergyColumn)
+        self.photon_output.enable(Output.CurrentPositionColumn)
+        self.photon_output.enable(Output.CreatedIdColumn)
+        self.photon_output.enable(Output.SourceEnergyColumn)
+        self.photon_output.enable(Output.TrajectoryLengthColumn)
+        self.photon_output.enable(Output.SourceDirectionColumn)
+        self.photon_output.enable(Output.SourcePositionColumn)
+        self.photon_output.enable(Output.WeightColumn)
+
+        self.photon_output.disable(Output.RedshiftColumn)
+        self.photon_output.disable(Output.CreatedDirectionColumn)
+        self.photon_output.disable(Output.CreatedEnergyColumn)
+        self.photon_output.disable(Output.CreatedPositionColumn)
+        self.photon_output.disable(Output.SourceIdColumn)
+        # we need this column for the blazar jet, don't disable
+        #self.output.disable(Output.SourcePositionColumn)
+
+
+        self.photon_output.setEnergyScale(eV)
+        self.photon_observer.onDetection(self.photon_output)
+
+        logging.info('Observer and output initialized')
+        return
+
 
     def _create_source(self):
         """Set up the source for the simulation"""
         self.source = Source()
         self.source.add(SourceRedshift(self.Source['z']))
-        if self.Observer['obsSmallSphere']:
-            self.source.add(SourcePosition(Vector3d(self.D, 0, 0)))
-            # emission to negativ x-axis
-            if self.Source.get('source_morphology', 'cone') == 'cone':
-                self.source.add(SourceEmissionCone(
-                                    Vector3d(np.cos(np.pi - np.radians(self.Observer['obsAngle'])), 
-                                        np.sin(np.pi - np.radians(self.Observer['obsAngle'])), 0), 
-                                    np.radians(self.Source['th_jet'])))
-            elif self.Source.get('source_morphology', 'cone') == 'dir':
-                self.source.add(SourceDirection(
-                                    Vector3d(np.cos(np.pi - np.radians(self.Observer['obsAngle'])), 
-                                        np.sin(np.pi - np.radians(self.Observer['obsAngle'])), 0)
-                                    ))
-            elif self.Source.get('source_morphology', 'cone') == 'iso':
-                self.source.add(SourceIsotropicEmission())
-            else:
-                raise ValueError("Chosen source morphology not supported.")
-        else:
+        if self.Observer['obsLargeSphere']:
             obsPosition = Vector3d(self.Observer['obsPosX'],self.Observer['obsPosY'],self.Observer['obsPosZ'])
             # obs position same as source position for LargeSphere Observer
             self.source.add(SourcePosition(obsPosition))
@@ -522,6 +552,8 @@ class SimCRPropa(object):
                                     ))
             else:
                 raise ValueError("Chosen source morphology not supported.")
+        else:
+            raise ValueError("Observer small sphere not available in CRPropa v3.2")
         # SourceParticleType takes int for particle ID. 
         # for a nucleus with A,Z you can use nucleusId(int a, int z) function
         # other IDs are given in http://pdg.lbl.gov/2016/reviews/rpp2016-rev-monte-carlo-numbering.pdf
@@ -619,131 +651,133 @@ class SimCRPropa(object):
         logging.info('modules initialized')
         return
 
-    def _setup_crcascade(self):
-        """
-        Setup simulation module for cascade initiated by cosmic rays
+    # def _setup_crcascade(self):
+    #     """
+    #     Setup simulation module for cascade initiated by cosmic rays
         
-        kwargs 
-        ------
-        """
-        if self.emcasc:
-            photons = True
-            electrons = True
-            neutrinos = False
-        else:
-            photons = False
-            electrons = False
-            neutrinos = True
-        antinucleons = False if self.Source['Composition'] == 2212 else True
-        limit = self.Simulation.get('thinning', 0.1)
-        logging.info("Set limit (= fraction of the mean free path, to which the propagation step will be limited)" +\
-                     f" for PhotoPionProduction to {limit}")
-        if limit < 0.5:
-            logging.warning("for high energies, set limit to >= 0.5 to avoid memory problems")
+    #     kwargs 
+    #     ------
+    #     """
+    #     if self.emcasc:
+    #         photons = True
+    #         electrons = True
+    #         neutrinos = False
+    #     else:
+    #         photons = False
+    #         electrons = False
+    #         neutrinos = True
+    #     antinucleons = False if self.Source['Composition'] == 2212 else True
+    #     limit = self.Simulation.get('thinning', 0.1)
+    #     logging.info("Set limit (= fraction of the mean free path, to which the propagation step will be limited)" +\
+    #                  f" for PhotoPionProduction to {limit}")
+    #     if limit < 0.5:
+    #         logging.warning("for high energies, set limit to >= 0.5 to avoid memory problems")
 
-        self.m = ModuleList()
-        #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4,
-        #double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
-        #self.m.add(PropagationCK(self.bField, 1e-2, 100 * kpc, 10 * Mpc))
-        #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
-        if self.Source['Energy'] >= 1e18 and self.emcasc:
-            logging.info("Energy is greater than 1 EeV, limiting " \
-                        f"sensitivity due to memory. E = {self.Source['Energy']}")
-            #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
-            tol = np.max([1e-4, self.Simulation['tol']])
-        else:
-            tol = self.Simulation['tol']
-            # this takes about a factor of five longer:
-            #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
-            # than this:
-            #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
+    #     self.m = ModuleList()
+    #     #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4,
+    #     #double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
+    #     #self.m.add(PropagationCK(self.bField, 1e-2, 100 * kpc, 10 * Mpc))
+    #     #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
+    #     if self.Source['Energy'] >= 1e18 and self.emcasc:
+    #         logging.info("Energy is greater than 1 EeV, limiting " \
+    #                     f"sensitivity due to memory. E = {self.Source['Energy']}")
+    #         #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
+    #         tol = np.max([1e-4, self.Simulation['tol']])
+    #     else:
+    #         tol = self.Simulation['tol']
+    #         # this takes about a factor of five longer:
+    #         #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
+    #         # than this:
+    #         #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
 
-        if self.Simulation.get('propagation', 'CK') == 'CK':
-            #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4, double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
-            logging.info("Using CK propagation module")
-            self.m.add(PropagationCK(self.bField, tol,
-                                     self.Simulation['minStepLength'] * pc,
-                                     self.Simulation['maxStepLength'] * Mpc))
+    #     if self.Simulation.get('propagation', 'CK') == 'CK':
+    #         #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4, double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
+    #         logging.info("Using CK propagation module")
+    #         self.m.add(PropagationCK(self.bField, tol,
+    #                                  self.Simulation['minStepLength'] * pc,
+    #                                  self.Simulation['maxStepLength'] * Mpc))
 
-        elif self.Simulation.get('propagation', 'CK') == 'BP':
-            # PropagationBP(ref_ptr<Ma.gneticField> field, double tolerance, double minStep, double maxStep)
-            logging.info("Using BP propagation module")
-            self.m.add(PropagationBP(self.bField, tol,
-                                     self.Simulation['minStepLength'] * pc,
-                                     self.Simulation['maxStepLength'] * Mpc))
-        else:
-            raise ValueError("unknown propagation module chosen")
+    #     elif self.Simulation.get('propagation', 'CK') == 'BP':
+    #         # PropagationBP(ref_ptr<Ma.gneticField> field, double tolerance, double minStep, double maxStep)
+    #         logging.info("Using BP propagation module")
+    #         self.m.add(PropagationBP(self.bField, tol,
+    #                                  self.Simulation['minStepLength'] * pc,
+    #                                  self.Simulation['maxStepLength'] * Mpc))
+    #     else:
+    #         raise ValueError("unknown propagation module chosen")
 
-        thinning = self.Simulation.get('thinning', 0.)
-        logging.info(f"Using thinning {thinning}")
-        if thinning <= 0.1:
-            logging.warning("for high energies, you might want to choose higher thinning values (close to 1.)")
-        # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
-        #m.add(Redshift())
-        # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
-        # Extends to negative redshift values to allow for symmetric time windows around z=0
-        self.m.add(FutureRedshift())
-        if self.emcasc:
-            #self.m.add(EMInverseComptonScattering(CMB, photons, limit)) # not activated in example notebook
-            #self.m.add(EMInverseComptonScattering(self._EBL(), photons, limit)) # not activated in example notebook
-            # EMPairProduction:  electron-pair production of cosmic ray photons 
-            #with background photons: gamma + gamma_b -> e+ + e- (Breit-Wheeler process).
-            # EMPairProduction(PhotonField photonField = CMB, bool haveElectrons = false,double limit = 0.1 ), 
-            #if haveElectrons = true, electron positron pair is created
-            # EMInverComptonScattering(PhotonField photonField = CMB,bool havePhotons = false,double limit = 0.1 ), 
-            #if havePhotons = True, photons are created
-            # also availableL EMDoublePairProduction, EMTripletPairProduction
-            #self.m.add(EMPairProduction(self._EBL(), electrons, limit)) # not activated in example notebook
+    #     thinning = self.Simulation.get('thinning', 0.)
+    #     logging.info(f"Using thinning {thinning}")
+    #     if thinning <= 0.1:
+    #         logging.warning("for high energies, you might want to choose higher thinning values (close to 1.)")
+    #     # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
+    #     #m.add(Redshift())
+    #     # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
+    #     # Extends to negative redshift values to allow for symmetric time windows around z=0
+    #     self.m.add(FutureRedshift())
+    #     if self.emcasc:
+    #         #self.m.add(EMInverseComptonScattering(CMB, photons, limit)) # not activated in example notebook
+    #         #self.m.add(EMInverseComptonScattering(self._EBL(), photons, limit)) # not activated in example notebook
+    #         # EMPairProduction:  electron-pair production of cosmic ray photons 
+    #         #with background photons: gamma + gamma_b -> e+ + e- (Breit-Wheeler process).
+    #         # EMPairProduction(PhotonField photonField = CMB, bool haveElectrons = false,double limit = 0.1 ), 
+    #         #if haveElectrons = true, electron positron pair is created
+    #         # EMInverComptonScattering(PhotonField photonField = CMB,bool havePhotons = false,double limit = 0.1 ), 
+    #         #if havePhotons = True, photons are created
+    #         # also availableL EMDoublePairProduction, EMTripletPairProduction
+    #         #self.m.add(EMPairProduction(self._EBL(), electrons, limit)) # not activated in example notebook
 
-            #self.m.add(EMPairProduction(CMB(), electrons, limit)) # not activated in example notebook
+    #         #self.m.add(EMPairProduction(CMB(), electrons, limit)) # not activated in example notebook
 
-            self.m.add(EMInverseComptonScattering(CMB(), photons, thinning))
-            self.m.add(EMInverseComptonScattering(self._URB(), photons, thinning))
-            self.m.add(EMInverseComptonScattering(self._EBL(), photons, thinning))
+    #         self.m.add(EMInverseComptonScattering(CMB(), photons, thinning))
+    #         self.m.add(EMInverseComptonScattering(self._URB(), photons, thinning))
+    #         self.m.add(EMInverseComptonScattering(self._EBL(), photons, thinning))
 
-            self.m.add(EMPairProduction(CMB(), electrons, thinning))
-            self.m.add(EMPairProduction(self._URB(), electrons, thinning))
-            self.m.add(EMPairProduction(self._EBL(), electrons, thinning))
-            self.m.add(EMDoublePairProduction(CMB(), electrons, thinning))
+    #         self.m.add(EMPairProduction(CMB(), electrons, thinning))
+    #         self.m.add(EMPairProduction(self._URB(), electrons, thinning))
+    #         self.m.add(EMPairProduction(self._EBL(), electrons, thinning))
+    #         self.m.add(EMDoublePairProduction(CMB(), electrons, thinning))
 
-            self.m.add(EMDoublePairProduction(self._URB(), electrons, thinning))
-            self.m.add(EMDoublePairProduction(self._EBL(), electrons, thinning))
+    #         self.m.add(EMDoublePairProduction(self._URB(), electrons, thinning))
+    #         self.m.add(EMDoublePairProduction(self._EBL(), electrons, thinning))
 
-            self.m.add(EMTripletPairProduction(CMB(), electrons, thinning))
-            self.m.add(EMTripletPairProduction(self._URB(), electrons, thinning))
-            self.m.add(EMTripletPairProduction(self._EBL(), electrons, thinning))
+    #         self.m.add(EMTripletPairProduction(CMB(), electrons, thinning))
+    #         self.m.add(EMTripletPairProduction(self._URB(), electrons, thinning))
+    #         self.m.add(EMTripletPairProduction(self._EBL(), electrons, thinning))
 
-        # for photo-pion production: 
-        # PhotoPionProduction (PhotonField photonField=CMB, bool photons=false, bool neutrinos=false, 
-        # bool electrons=false, bool antiNucleons=false, double limit=0.1, bool haveRedshiftDependence=false)
-        self.m.add(PhotoPionProduction(CMB(), photons, neutrinos, electrons, antinucleons, limit, True))
-        self.m.add(PhotoPionProduction(self._EBL(), photons, neutrinos, electrons, antinucleons, limit, True))
+    #     # for photo-pion production: 
+    #     # PhotoPionProduction (PhotonField photonField=CMB, bool photons=false, bool neutrinos=false, 
+    #     # bool electrons=false, bool antiNucleons=false, double limit=0.1, bool haveRedshiftDependence=false)
+    #     self.m.add(PhotoPionProduction(CMB(), photons, neutrinos, electrons, antinucleons, limit, True))
+    #     self.m.add(PhotoPionProduction(self._EBL(), photons, neutrinos, electrons, antinucleons, limit, True))
 
-        # ElectronPairProduction (PhotonField photonField=CMB, bool haveElectrons=false, double limit=0.1)
-        # Electron-pair production of charged nuclei with background photons. 
-        self.m.add(ElectronPairProduction(CMB(), electrons, limit))
-        self.m.add(ElectronPairProduction(self._EBL(), electrons, limit))
-        if not self.Source['Composition'] == 2212: # protons don't decay or diseintegrate
-            # for nuclear decay:
-            #NuclearDecay (bool electrons=false, bool photons=false, bool neutrinos=false, double limit=0.1)
-            self.m.add(NuclearDecay(electrons, photons, neutrinos))
-            # for photo disentigration:
-            #PhotoDisintegration (PhotonField photonField=CMB, bool havePhotons=false, double limit=0.1)
-            self.m.add(PhotoDisintegration(CMB(), photons))
-            self.m.add(PhotoDisintegration(self._EBL(), photons))
-        # Synchrotron radiation: 
-        #SynchrotronRadiation (ref_ptr< MagneticField > field, bool havePhotons=false, double limit=0.1) or 
-        #SynchrotronRadiation (double Brms=0, bool havePhotons=false, double limit=0.1) ; 
-        #Large number of particles can cause memory problems!
-        #self.m.add(SynchrotronRadiation(self.bField, photons)) # not in example notebook
-        logging.info('modules initialized')
-        return
+    #     # ElectronPairProduction (PhotonField photonField=CMB, bool haveElectrons=false, double limit=0.1)
+    #     # Electron-pair production of charged nuclei with background photons. 
+    #     self.m.add(ElectronPairProduction(CMB(), electrons, limit))
+    #     self.m.add(ElectronPairProduction(self._EBL(), electrons, limit))
+    #     if not self.Source['Composition'] == 2212: # protons don't decay or diseintegrate
+    #         # for nuclear decay:
+    #         #NuclearDecay (bool electrons=false, bool photons=false, bool neutrinos=false, double limit=0.1)
+    #         self.m.add(NuclearDecay(electrons, photons, neutrinos))
+    #         # for photo disentigration:
+    #         #PhotoDisintegration (PhotonField photonField=CMB, bool havePhotons=false, double limit=0.1)
+    #         self.m.add(PhotoDisintegration(CMB(), photons))
+    #         self.m.add(PhotoDisintegration(self._EBL(), photons))
+    #     # Synchrotron radiation: 
+    #     #SynchrotronRadiation (ref_ptr< MagneticField > field, bool havePhotons=false, double limit=0.1) or 
+    #     #SynchrotronRadiation (double Brms=0, bool havePhotons=false, double limit=0.1) ; 
+    #     #Large number of particles can cause memory problems!
+    #     #self.m.add(SynchrotronRadiation(self.bField, photons)) # not in example notebook
+    #     logging.info('modules initialized')
+    #     return
 
     def _setup_break(self):
         """Setup breaking conditions"""
         # add breaking conditions
         self.m.add(MinimumEnergy(self.BreakConditions['Emin'] * eV))
-        self.m.add(self.observer)
+        self.m.add(self.photon_observer)
+        if self.Observer["obsElectrons"]:
+            self.m.add(self.electron_observer)
         # stop tracing particle once it's propagation is longer than Dmax
         # or 1.5 * comoving distance of distance > 100. Mpc. 
         # this would anyway correspond to a very long time delay of > 50. Mpc / c
@@ -796,9 +830,12 @@ class SimCRPropa(object):
             self.Source['Composition'] == -11:
             self._setup_emcascade()
         else:
-            self._setup_crcascade()
+            raise ValueError("CR cascaded commented out. Uncomment.")
+            #self._setup_crcascade()
         self._create_source()
-        self._create_observer()
+        self._create_photon_observer()
+        if self.Observer["obsElectrons"]:
+            self._create_electron_positron_observer()
         self._setup_break()
         return 
 
@@ -828,7 +865,7 @@ class SimCRPropa(object):
                         self.D = redshift2ComovingDistance(self.Source['z']) # comoving source distance
                         self.setOutput(0, idB=ib, idL=il, it=it, iz=iz)
 
-                        outfile = path.join(self.FileIO['outdir'], self.OutName.split('_')[0] + '*.hdf5')
+                        outfile = path.join(self.FileIO['outdir'], self.PhotonOutName.split('_')[0] + '*.hdf5')
                         missing = utils.missing_files(outfile,njobs, split = '.hdf5')
                         self.config['Simulation']['n_cpu'] = kwargs['n']
 
