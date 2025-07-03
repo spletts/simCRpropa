@@ -270,6 +270,8 @@ class SimCRPropa(object):
             self._EBL = IRB_Finke10
         elif 'Franceschini08' in self.Bfield['EBL']:
             self._EBL = IRB_Franceschini08
+        elif 'IRB_Saldana21' in self.Bfield['EBL']:
+            self._EBL = IRB_Saldana21
         else:
             raise ValueError("Unknown EBL model chosen")
         self._URB = URB_Protheroe96
