@@ -17,6 +17,7 @@ from fermiAnalysis.batchfarm import utils, lsf, sdf
 from crpropa import *
 from psutil import virtual_memory
 from subprocess import call, check_call, Popen, PIPE, check_output, CalledProcessError
+import sys
 
 def init_lsf(local_id=0):
     """
@@ -34,19 +35,19 @@ def init_lsf(local_id=0):
     try:
         list(os.environ.keys()).index("LSB_JOBNAME")
         job_id = int(os.environ["LSB_JOBINDEX"])
-        tmpdir = os.path.join('/scratch/{0:s}.{1:s}/'.format(os.environ['USER'],os.environ["LSB_JOBID"]))
+        tmpdir = os.path.join(f"/scratch/{os.environ['USER']}.{os.environ['LSB_JOBID']}/")
         if not os.path.exists(tmpdir):
             tmpdir = os.mkdir(tmpdir)
-        logging.info('os.listdir: {0}'.format(os.listdir(tmpdir)))
+        logging.info(f'os.listdir: {os.listdir(tmpdir)}')
 
         time.sleep(10.)
-        tmpdir = os.path.join(tmpdir,'{0:s}.XXXXXX'.format(os.environ["LSB_JOBID"]))
+        tmpdir = os.path.join(tmpdir,f"{os.environ['LSB_JOBID']}.XXXXXX")
         p = Popen(["mktemp", "-d", tmpdir], stdout=PIPE)  # make a temporary directory and get its name
         time.sleep(10.)
         out, err = p.communicate()
 
-        logging.info('out: {0}'.format(out))
-        logging.info('err: {0}'.format(err))
+        logging.info(f'out: {out}')
+        logging.info(f'err: {err}')
 
         tmpdir = os.path.join('/scratch',out.decode('ascii').split()[0])
         time.sleep(10.)
@@ -56,10 +57,10 @@ def init_lsf(local_id=0):
         if not os.path.exists(tmpdir):
             tmpdir = os.mkdir(tmpdir)
 
-    logging.info('tmpdir is {0:s}.'.format(tmpdir))
+    logging.info(f'tmpdir is {tmpdir}.')
 
     if not os.path.exists(tmpdir):
-        logging.error('Tmpdir does not exist: {0}. Exit 14'.format(tmpdir))
+        logging.error(f'Tmpdir does not exist: {tmpdir}. Exit 14')
         sys.exit(14)
 
     return tmpdir, job_id
@@ -82,30 +83,30 @@ def init_sdf(local_id=0):
         list(os.environ.keys()).index("SLURM_JOB_NAME")
         job_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         tmpdir = os.environ["LSCRATCH"]
-        logging.info('os.listdir: {0}'.format(os.listdir(tmpdir)))
+        logging.info(f'os.listdir: {os.listdir(tmpdir)}')
 
         time.sleep(1.)
-        tmpdir = os.path.join(tmpdir,'{0:s}.XXXXXX'.format(os.environ["SLURM_JOB_ID"]))
+        tmpdir = os.path.join(tmpdir,f"{os.environ['SLURM_JOB_ID']}.XXXXXX")
         p = Popen(["mktemp", "-d", tmpdir], stdout=PIPE)  # make a temporary directory and get its name
         time.sleep(1.)
         out, err = p.communicate()
 
-        logging.info('out: {0}'.format(out))
-        logging.info('err: {0}'.format(err))
+        logging.info(f'out: {out}')
+        logging.info(f'err: {err}')
 
         tmpdir = os.path.join(os.environ["LSCRATCH"], out.decode('ascii').split()[0])
         time.sleep(1.)
     except ValueError as e:
-        logging.error("Received error {0}".format(e))
+        logging.error(f"Received error {e}")
         job_id = local_id
         tmpdir = os.path.join(os.environ["PWD"],'tmp/')
         if not os.path.exists(tmpdir):
             tmpdir = os.mkdir(tmpdir)
 
-    logging.info('tmpdir is {0:s}.'.format(tmpdir))
+    logging.info(f'tmpdir is {tmpdir}.')
 
     if not os.path.exists(tmpdir):
-        logging.error('Tmpdir does not exist: {0}. Exit 14'.format(tmpdir))
+        logging.error(f'Tmpdir does not exist: {tmpdir}. Exit 14')
         sys.exit(14)
 
     return tmpdir,job_id
@@ -116,7 +117,7 @@ def limit_memory(maxsize):
     if maxsize * 1e6 > virtual_memory().total:
         maxsize = int(virtual_memory().total / 1e6)
     resource.setrlimit(resource.RLIMIT_AS, (maxsize * int(1e6), hard))
-    logging.info("limited memory to {0:d} Mbytes".format(maxsize))
+    logging.info(f"limited memory to {maxsize} Mbytes")
     return
 
 
@@ -147,14 +148,14 @@ if __name__ == '__main__':
     elif args.batch_farm_name == 'lsf':
         tmpdir, job_id = init_lsf(local_id=args.i)
 
-    logging.info("Host name: {0}".format(socket.gethostname()))
+    logging.info(f"Host name: {format(socket.gethostname())}")
 
     if not job_id:
         job_id = args.i
-    logging.info('tmpdir: {0:s}, job_id: {1:d}'.format(tmpdir,job_id))
+    logging.info(f'tmpdir: {tmpdir}, job_id: {job_id}')
     os.chdir(tmpdir)    # go to tmp directory
-    logging.info('Entering directory {0:s}'.format(tmpdir))
-    logging.info('PWD is {0:s}'.format(os.environ["PWD"]))
+    logging.info(f'Entering directory {tmpdir}')
+    logging.info(f"PWD is {os.environ['PWD']}")
 
     sim = SimCRPropa(**config)
 # limit number of used threads -- does not really work... 
@@ -162,8 +163,8 @@ if __name__ == '__main__':
 
     sim.setOutput(job_id)
     sim.outputfile = str(path.join(tmpdir, path.basename(sim.outputfile)))
-    logging.info("writing output file to : {0:s}".format(sim.outputfile))
-    logging.info("and will copy it to : {0:s}".format(sim.FileIO['outdir']))
+    logging.info(f"writing output file to : {sim.outputfile}")
+    logging.info(f"and will copy it to : {sim.FileIO['outdir']}")
     sim.setup()
 
 #    weights = sim.Simulation['Nbatch'] * \
@@ -177,7 +178,7 @@ if __name__ == '__main__':
 #            weights *= (1. + 0.1 *sim.config['Source']['th_jet']**2.)
 #        if sim.config['Observer']['obsAngle'] > 0.:
 #            weights *= (1. + 0.1 * (sim.config['Observer']['obsAngle'] + 1.))
-#    logging.info('weights: {0}'.format(weights))
+#    logging.info(f'weights: {weights}')
 
     # add distances to config
     config['Source']['LightTravelDistance'] = redshift2LightTravelDistance(config['Source']['z'])
@@ -195,8 +196,7 @@ if __name__ == '__main__':
 
         if not sim.Source['useSpectrum']:
             sim.Source['Energy'] = sim.EeV[i]
-            logging.info("======= Bin {0:d} / {1:d}, Energy : {2:3e} eV ========".format(
-                i + 1, sim.nbins, sim.EeV[i]))
+            logging.info(f"======= Bin {i + 1} / {sim.nbins}, Energy : {sim.EeV[i]} eV ========")
         logging.info(f"Running simulation for {sim.weights[i]} particle(s), saving output to {sim.outputfile}")
 
         t0 = time.time()
@@ -211,14 +211,14 @@ if __name__ == '__main__':
         # void run(SourceInterface *source, size_t count, bool recursive = true, bool secondariesFirst = false)
         sim.m.run(sim.source,  int(sim.weights[i]), True, True)
         sim.output.close()
-        logging.info("Simulating bin {0:d} / {1:d} took {2:.1f} s".format(i + 1, sim.nbins, time.time() - t0))
+        logging.info(f"Simulating bin {i + 1} / {sim.nbins} took {time.time() - t0} s")
 
         # check memory usage
     #    snapshot = tracemalloc.take_snapshot() 
     #    top_stats = snapshot.statistics('lineno') 
     #    for stat in top_stats[:1]: 
     #       print(stat)
-    logging.info("Total simulation took {0:.1f} s".format(time.time() - t00))
+    logging.info(f"Total simulation took {time.time() - t00} s")
     #tracemalloc.stop()
 
     utils.sleep(1.)

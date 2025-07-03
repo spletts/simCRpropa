@@ -21,7 +21,7 @@ import h5py
 @lsf.setLsf
 def _submit_run_lsf(script, config, option, njobs, **kwargs):
     """Submit jobs to LSF (old) cluster using bsub"""
-    kwargs.setdefault('span', "span[ptile={:d}]".format(kwargs['n']))
+    kwargs.setdefault('span', f"span[ptile={kwargs['n']}]")
     option += " -b lsf"
     lsf.submit_lsf(script,
                    config,
@@ -51,8 +51,7 @@ def initRandomField(vgrid, Bamplitude, seed=0):
     nx = vgrid.getNx()
     ny = vgrid.getNy()
     nz = vgrid.getNz()
-    logging.info("vgrid: nx = {0:d}, ny = {0:d}, nz = {0:d}".format(
-        nx,ny,nz))
+    logging.info(f"vgrid: nx = {nx}, ny = {ny}, nz = {nz}")
     for xi in range(0,nx):
         for yi in range(0,ny):
             for zi in range(0,nz):
@@ -232,8 +231,7 @@ class SimCRPropa(object):
             elif isinstance(self.Bfield[k], float):
                 x = [self.Bfield[k]]
             else:
-                raise ValueError("{0:s} type not understood: {1}".format(
-                    type(k, self.Bfield[k])))
+                raise ValueError(f"{self.Bfield[k]} type not understood: {type(self.Bfield[k])}")
             if not i:
                 self._bList = x
             else:
@@ -255,8 +253,7 @@ class SimCRPropa(object):
             elif isinstance(self.Source[k], float):
                 x = [self.Source[k]]
             else:
-                raise ValueError("{0:s} type not understood: {1}".format(
-                    type(k, self.Source[k])))
+                raise ValueError(f"{self.Source[k]} type not understood: {type(self.Source[k])}")
             if not i:
                 self._th_jetList= x
             else:
@@ -321,7 +318,7 @@ class SimCRPropa(object):
             self.weights = self.weights.astype(int)
             self.nbins = self.EeV.size
             self.Source['Energy'] = self.EeV[0]
-            logging.info("There will be {0:d} energy bins".format(self.nbins))
+            logging.info(f"There will be {self.nbins} energy bins")
             if not self.nbins:
                 raise ValueError("No energy bins requested, change Emin, Emax, or Esteps")
 
@@ -340,17 +337,16 @@ class SimCRPropa(object):
 
             dt = [u.Quantity(msl) for msl in self._minStepLength]
             dt = np.array([t.value for t in dt]) * dt[0].unit
-            self._minStepLength = (dt * c.c.to("pc / {0:s}".format(dt[0].unit))).value
+            self._minStepLength = (dt * c.c.to(f"pc / {dt[0].unit}")).value
             self.Simulation['minStepLength'] = self._minStepLength[0]
-            logging.info("Set step length(s) to {0} pc " \
-                         "from requsted time resolution(s) {1}".format(self._minStepLength,
-                                                                        dt))
+            logging.info(f"Set step length(s) to {self._minStepLength} pc " \
+                         f"from requsted time resolution(s) {dt}")
         else:
             self._minStepLength = self.Simulation['minStepLength']
-            logging.info("Set step length(s) to {0} pc ".format(self._minStepLength))
+            logging.info(f"Set step length(s) to {self._minStepLength} pc")
 
         # set up cosmology
-        logging.info("Setting up cosmology with h={0[h]} and Omega_matter={0[Om]}".format(self.Cosmology))
+        logging.info(f"Setting up cosmology with h={self.Cosmology['h']} and Omega_matter={self.Cosmology['Om']}")
         setCosmologyParameters(self.Cosmology['h'], self.Cosmology['Om'])
         return
 
@@ -407,7 +403,7 @@ class SimCRPropa(object):
         """Set up simulation volume and magnetic field"""
         boxOrigin = Vector3d(0, 0, 0)
         boxSpacing = self.Bfield['boxSize'] * Mpc / self.Bfield['NBgrid']
-        logging.info('Box spacing for B field: {0:.3e} Mpc'.format(boxSpacing / Mpc))
+        logging.info(f'Box spacing for B field: {boxSpacing / Mpc} Mpc')
 
         if self.Bfield['type'] == 'turbulence':
             print(2. * boxSpacing / Mpc, self.Bfield['maxTurbScale'])
@@ -437,11 +433,10 @@ class SimCRPropa(object):
 
             self.__extent = self.Bfield['boxSize'] * Mpc
             logging.info('B field initialized')
-            logging.info('Lc = {0:.3e} kpc'.format(
-                self.bField.getCorrelationLength() / kpc))  # correlation length, input in kpc
+            logging.info(f'Lc = {self.bField.getCorrelationLength() / kpc} kpc')  # correlation length, input in kpc
 
         if self.Bfield['type'] == 'cell':
-            logging.info('Box spacing for cell-like B field: {0:.3e} Mpc'.format(self.Bfield['maxTurbScale']))
+            logging.info(f"Box spacing for cell-like B field: {self.Bfield['maxTurbScale']} Mpc")
             gridSpacing = self.Bfield['maxTurbScale'] * Mpc
             if self.Bfield['NBgrid'] == 0:
                 gridSize = int(np.ceil(redshift2ComovingDistance(self.Source['z'])/\
@@ -463,18 +458,13 @@ class SimCRPropa(object):
             logging.info('B field initialized')
 
 
-        #logging.info('vgrid extension: {0:.3e} Mpc'.format(self.__extent / Mpc))
-        #logging.info('<B^2> = {0:.3e} nG'.format((rmsFieldStrength(vgrid) / nG)))   # RMS
-        #logging.info('<|B|> = {0:.3e} nG'.format((meanFieldStrength(vgrid) / nG)))  # mean
-        #logging.info('B(10 Mpc, 0, 0)={0} nG'.format(self.bField.getField(Vector3d(10,0,0) * Mpc) / nG))
-
-        logging.info('vgrid extension: {0:.3e} Mpc'.format(self.__extent / Mpc))
+        logging.info(f'vgrid extension: {self.__extent / Mpc} Mpc')
         try:
-            logging.info('<B^2> = {0:.3e} nG'.format(self.bField.getBrms() / nG))   # RMS
-            logging.info('<|B|> = {0:.3e} nG'.format(self.bField.getMeanFieldStrength() / nG))  # mean
+            logging.info(f'<B^2> = {self.bField.getBrms() / nG} nG')   # RMS
+            logging.info(f'<|B|> = {self.bField.getMeanFieldStrength() / nG} nG')  # mean
         except AttributeError:
             pass
-        logging.info('B(10 Mpc, 0, 0)={0} nG'.format(self.bField.getField(Vector3d(10,0,0) * Mpc) / nG))
+        logging.info(f'B(10 Mpc, 0, 0)={self.bField.getField(Vector3d(10,0,0) * Mpc) / nG} nG')
         return
 
     def _create_observer(self):
@@ -501,7 +491,7 @@ class SimCRPropa(object):
         #ObserverNucleusVeto
         #ObserverTimeEvolution
 
-        logging.info('Saving output to {0:s}'.format(self.outputfile))
+        logging.info(f'Saving output to {self.outputfile}')
         if self.Simulation.get('outputtype', 'ascii') == 'ascii':
             self.output = TextOutput(self.outputfile,
                                      Output.Event3D)
@@ -587,16 +577,8 @@ class SimCRPropa(object):
         # nu_tau : 16
         # proton: 2212
         if self.Source['useSpectrum']:
-            #spec = self.Source['Spectrum'].format(self.Source)
-            #logging.info('Spectrum: {0}'.format(spec))
-            # this does not work anymore in CRPropa 3.2
-            #genericSourceComposition = SourceGenericComposition(self.Source['Emin'] * eV, 
-            #                                                    self.Source['Emax'] * eV, 
-            #                                                    spec)
-            #genericSourceComposition.add(self.Source['Composition'],1)
-            #self.source.add(genericSourceComposition)
             # for a power law use SourcePowerLawSpectrum (double Emin, double Emax, double index)
-            logging.info('Using power spectrum E^{0:.3f}'.format(self.Source['index']))
+            logging.info(f"Using power spectrum E^{self.Source['index']}")
             self.source.add(SourcePowerLawSpectrum(self.Source['Emin'] * eV, 
                                                    self.Source['Emax'] * eV, 
                                                    self.Source['index']))
@@ -652,8 +634,7 @@ class SimCRPropa(object):
             # CRpropa version with 
             # possibility to deactivate small angle approximation
             self.m.add(EMPairProduction(self._EBL(), True, thinning, self.Simulation.get('forward_approx', True)))
-            logging.info('Using forward approx: {0} (if this is false, simulation will be slower!)'.format(
-                self.Simulation.get('forward_approx', True)))
+            logging.info(f"Using forward approx: {self.Simulation.get('forward_approx', True)} (if this is false, simulation will be slower!)")
         except:
             self.m.add(EMPairProduction(self._EBL(), True, thinning))
 
@@ -701,7 +682,7 @@ class SimCRPropa(object):
         antinucleons = False if self.Source['Composition'] == 2212 else True
         limit = self.Simulation.get('thinning', 0.1)
         logging.info("Set limit (= fraction of the mean free path, to which the propagation step will be limited)" +\
-                     " for PhotoPionProduction to {0}".format(limit))
+                     f" for PhotoPionProduction to {limit}")
         if limit < 0.5:
             logging.warning("for high energies, set limit to >= 0.5 to avoid memory problems")
 
@@ -712,7 +693,7 @@ class SimCRPropa(object):
         #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
         if self.Source['Energy'] >= 1e18 and self.emcasc:
             logging.info("Energy is greater than 1 EeV, limiting " \
-                        "sensitivity due to memory. E = {0[Energy]:.3e}".format(self.Source))
+                        f"sensitivity due to memory. E = {self.Source['Energy']}")
             #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
             tol = np.max([1e-4, self.Simulation['tol']])
         else:
@@ -739,7 +720,7 @@ class SimCRPropa(object):
             raise ValueError("unknown propagation module chosen")
 
         thinning = self.Simulation.get('thinning', 0.)
-        logging.info("Using thinning {0}".format(thinning))
+        logging.info(f"Using thinning {thinning}")
         if thinning <= 0.1:
             logging.warning("for high energies, you might want to choose higher thinning values (close to 1.)")
         # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
@@ -833,15 +814,15 @@ class SimCRPropa(object):
 
         # this below is the prefactor m c^2 / q in Volt
         min_rigidity *= crpropa.mass_electron * crpropa.c_squared / crpropa.eV * crpropa.volt
-        logging.info("The minimum electron / positron rigidity should be <~ {0:.3e} GV".format(min_rigidity / 1e9))
+        logging.info(f"The minimum electron / positron rigidity should be <~ {min_rigidity / 1e9} GV")
 
         if rigidity > 0.:
 
             if rigidity > min_rigidity / 1e9:
-                raise ValueError("chosen minimal rigidity {0:.3e} GV too large for minimum chosen photon energy".format(rigidity))
+                raise ValueError(f"chosen minimal rigidity {rigidity} GV too large for minimum chosen photon energy {self.BreakConditions['Emin'] * eV} eV")
 
             self.m.add(MinimumRigidity(rigidity * crpropa.giga * crpropa.volt))
-            logging.info("Set minimum rigidity to {0:.3e} GV".format(rigidity))
+            logging.info(f"Set minimum rigidity to {rigidity} GV")
 
         else:
             logging.info("No cut on Rigidity set")
@@ -875,7 +856,7 @@ class SimCRPropa(object):
         print (script)
 
         if not path.isfile(script):
-            raise IOError("Script {0:s} not found!".format(script))
+            raise IOError(f"Script {script} not found!")
 
         for ib, b in enumerate(self._bList):
             for il, l in enumerate(self._turbScaleList):
@@ -897,10 +878,9 @@ class SimCRPropa(object):
                         self.config['Simulation']['n_cpu'] = kwargs['n']
 
                         if len(missing) < njobs:
-                            logging.debug('here {0}'.format(njobs))
+                            logging.debug(f'here {njobs}')
                             njobs = missing
-                            logging.info('there are {0:d} files missing in {1:s}'.format(len(missing),
-                            outfile ))
+                            logging.info(f'there are {len(missing)} files missing in {outfile}')
 
                         if len(missing) and not force_combine:
                             self.config['configname'] = 'r'
