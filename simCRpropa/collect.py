@@ -17,7 +17,7 @@ try:
 except:
     pass
 from glob import glob
-from scipy.integrate import simps
+from scipy.integrate import simpson as simp
 from collections import OrderedDict
 from collections.abc import Iterable
 
