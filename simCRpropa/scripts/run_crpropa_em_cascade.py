@@ -160,7 +160,7 @@ if __name__ == '__main__':
     logging.info(f"PWD is {os.environ['PWD']}")
 
     sim = SimCRPropa(**config)
-# limit number of used threads -- does not really work... 
+    # limit number of used threads -- does not really work... 
     os.environ['OMP_NUM_THREADS'] = str(sim.Simulation['cpu_n'])
 
     sim.setOutput(job_id)

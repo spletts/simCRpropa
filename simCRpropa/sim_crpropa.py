@@ -109,14 +109,14 @@ def build_histogram(combined, config, cascparent = 11., intparent = 22., obs = 2
     casc = np.zeros((Ecen.size,Ecen.size))
 
     for i in range(Ebins.size - 1):
-        m = (combined['simEM/ID1/Ebin{0:03n}'.format(i)][...] == np.abs(intparent)) \
-                & (combined['simEM/ID/Ebin{0:03n}'.format(i)][...] == np.abs(obs))
-        h = np.histogram(combined['simEM/E/Ebin{0:03n}'.format(i)][m], bins = Ebins)
+        m = (combined[f'simEM/ID1/Ebin{i:03n}'][...] == np.abs(intparent)) \
+                & (combined[f'simEM/ID/Ebin{i:03n}'][...] == np.abs(obs))
+        h = np.histogram(combined[f'simEM/E/Ebin{i:03n}'][m], bins = Ebins)
         intspec[i,:] = h[0]
                                 
-        m = (combined['simEM/ID1/Ebin{0:03n}'.format(i)][...] == np.abs(cascparent)) \
-                & (combined['simEM/ID/Ebin{0:03n}'.format(i)][...] == np.abs(obs))
-        h = np.histogram(combined['simEM/E/Ebin{0:03n}'.format(i)][m], bins = Ebins)
+        m = (combined[f'simEM/ID1/Ebin{i:03n}'][...] == np.abs(cascparent)) \
+                & (combined[f'simEM/ID/Ebin{i:03n}'][...] == np.abs(obs))
+        h = np.histogram(combined[f'simEM/E/Ebin{i:03n}'][m], bins = Ebins)
         casc[i,:] = h[0]
     return intspec, casc, Ebins
 
@@ -154,8 +154,8 @@ def build_histogram_obs(combined, config, obs = 22., Ebins = np.array([])):
 
     for i,k in enumerate(combined['simEM/E'].keys()):
                                 
-        m = combined['simEM/ID/{0:s}'.format(k)][...] == np.abs(obs)
-        h = np.histogram(combined['simEM/E/{0:s}'.format(k)][m], bins = Ebins)
+        m = combined[f'simEM/ID/{k:s}'][...] == np.abs(obs)
+        h = np.histogram(combined[f'simEM/E/{k:s}'][m], bins = Ebins)
         casc[i,:] = h[0]
     return casc, Ebins
 
@@ -297,9 +297,9 @@ class SimCRPropa(object):
     def setOutput(self,jobid, idB=0, idL=0, it=0, iz=0):
         """Set output file and directory"""
         if self.Simulation.get('outputtype', 'ascii') == 'ascii':
-            self.PhotonOutName = 'casc_{0:05d}.dat'.format(jobid)
+            self.PhotonOutName = f'casc_{jobid:05d}.dat'
         elif self.Simulation.get('outputtype', 'ascii') == 'hdf5':
-            self.PhotonOutName = 'casc_{0:05d}.hdf5'.format(jobid)
+            self.PhotonOutName = f'casc_{jobid:05d}.hdf5'
         else:
             raise ValueError("unknown output type chosen")
 
@@ -309,10 +309,10 @@ class SimCRPropa(object):
 
         # append options to file path
         self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['basedir'],
-                                'z{0[z]:.3f}'.format(self.Source)))
+                                f"z{self.Source['z']:.3f}"))
         if self.Source.get('source_morphology', 'cone') == 'cone':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                            'th_jet{0[th_jet]}/'.format(self.Source)))
+                            f"th_jet{self.Source['th_jet']}/"))
         elif self.Source.get('source_morphology', 'cone') == 'iso':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
                                                 'iso/'))
@@ -322,21 +322,24 @@ class SimCRPropa(object):
         else:
             raise ValueError("Chosen source morphology not supported.")
         self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                        'th_obs{0[obsAngle]}/'.format(self.Observer)))
+                        f"th_obs{self.Observer['obsAngle']}/"))
         self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                        'spec{0[useSpectrum]:d}/'.format(self.Source)))
+                        f"spec{self.Source['useSpectrum']:d}/"))
 
         self.Bfield['B'] = self._bList[idB]
         self.Bfield['maxTurbScale'] = self._turbScaleList[idL]
+        solver = self.Simulation['propagation']
+        solver_dict = {'CK': 'cash_karp', 'BP': 'boris_push'}
 
         if self.Bfield['type'] == 'turbulence':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                'Bturb{0[B]:.2e}/q{0[turbIndex]:.2f}/scale{0[maxTurbScale]:.2f}/'.format(self.Bfield)))
+                f"{solver_dict[solver]}/Bturb{self.Bfield['B']:.2e}/q{self.Bfield['turbIndex']:.2f}/scale{self.Bfield['maxTurbScale']:.2f}/"))
         elif self.Bfield['type'] =='cell':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                'Bcell{0[B]:.2e}/scale{0[maxTurbScale]:.2f}/'.format(self.Bfield)))
+                f"{solver_dict[solver]}/Bcell{self.Bfield['B']:.2e}/scale{self.Bfield['maxTurbScale']:.2f}/"))
         else:
-            raise ValueError("Bfield type must be either 'cell' or 'turbulence' not {0[type]}".format(self.Bfield))
+            raise ValueError(f"Bfield type must be either 'cell' or 'turbulence' not {self.Bfiel['type']}")
+        
 
         self.photonoutputfile = str(path.join(self.FileIO['outdir'], self.PhotonOutName))
 
@@ -345,7 +348,7 @@ class SimCRPropa(object):
             # Make directory if it doesn't exist
             os.makedirs(os.path.dirname(self.electronoutputfile), exist_ok=True)
 
-        logging.info("outdir: {0[outdir]:s}".format(self.FileIO))
+        logging.info(f"outdir: {self.FileIO['outdir']:s}")
         logging.info(f"outfile for photons: {self.photonoutputfile}")
         
         return
@@ -578,15 +581,14 @@ class SimCRPropa(object):
         """Setup simulation module for electromagnetic cascade"""
         self.m = ModuleList()
 
-
-        if self.Simulation.get('propagation', 'CK') == 'CK':
+        if self.Simulation['propagation'] == 'CK':
             #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4, double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
             logging.info("Using CK propagation module")
             self.m.add(PropagationCK(self.bField, self.Simulation['tol'],
                                      self.Simulation['minStepLength'] * pc,
                                      self.Simulation['maxStepLength'] * Mpc))
 
-        elif self.Simulation.get('propagation', 'CK') == 'BP':
+        elif self.Simulation['propagation'] == 'BP':
             # PropagationBP(ref_ptr<Ma.gneticField> field, double tolerance, double minStep, double maxStep)
             logging.info("Using BP propagation module")
             self.m.add(PropagationBP(self.bField, self.Simulation['tol'],
@@ -877,8 +879,7 @@ class SimCRPropa(object):
                             self.config['configname'] = 'r'
                             kwargs['logdir'] = path.join(self.FileIO['outdir'],'log/')
                             kwargs['tmpdir'] = path.join(self.FileIO['outdir'],'tmp/')
-                            kwargs['jname'] = 'b{0:.2f}l{1:.2f}th{2:.2f}z{3:.3f}{4:s}'.format(
-                                np.log10(b), np.log10(l), t, z, self.Simulation.get('name', ''))
+                            kwargs['jname'] = f"b{np.log10(b):.2f}l{np.log10(l):.2f}th{t:.2f}z{z:.3f}{self.Simulation.get('name', '')}"
                             kwargs['log'] = path.join(kwargs['logdir'], kwargs['jname'] + ".out")
                             kwargs['err'] = path.join(kwargs['logdir'], kwargs['jname'] + ".err")
 
