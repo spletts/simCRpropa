@@ -46,7 +46,100 @@ def _submit_run_sdf(script, config, option, njobs, **kwargs):
                    **kwargs)
 
 
+def init_rectangular_prism_bfield(field_zero_near_origin, vgrid, obsSize,
+                                  b_void=0*gauss, b_ext=1e-13*gauss, 
+                                  seed=0):
+    """Fill grid with magnetic field values in the shape of a rectangular prism.
+    PUT ALL UNITS IN SI.
+
+    Parameters
+    ----------
+    field_zero_near_src : bool
+        If True, |B|=0 in the rectangular prism near the source (from approximately the source to halfway along the LoS), 
+        and is nonzero elsewhere.
+        If False, |B| != 0 in the rectangular prism near the source (from approximately the source to halfway along the LoS), 
+        and |B|=0 elsewhere.
+    b_void : float
+        Magnetic field in voids, in Gauss.
+    b_ext : float
+        Magnetic field outside/exterior to voids, in Gauss.
+    seed : int
+        Seed for random direction of magnetic field at each grid point.
+    gridSpacingMpc : float or int?
+        Side length of each individual grid cell, in Mpc
+    num_pad_cell : int
+    even_grid : bool
+    h : float
+    Om : float
+
+    Returns
+    -------
+    """
+    msg = f"Using random seed={seed}"
+    logging.info(msg)
+    print(msg)
+    np.random.seed(seed)
+    gridArray = vgrid.getGrid()
+    nx = vgrid.getNx()
+    ny = vgrid.getNy()
+    nz = vgrid.getNz()
+    msg = f"vgrid: nx={nx}, ny={ny}, nz={nz}"
+    logging.info(msg)
+    print(msg)
+
+    # Fill grid
+    for xi in range(0, nx):
+        for yi in range(0, ny):
+            for zi in range(0, nz):
+                vect3d = vgrid.get(xi, yi, zi)
+                x = np.random.uniform(-1,1)
+                y = np.random.uniform(-1,1)
+                z = np.random.uniform(-1,1)
+                d = np.sqrt(x*x+y*y+z*z)
+
+                if field_zero_near_origin:
+                    # Check if grid x coordinate is in the first half along the LoS from observer to source (x is along LoS: src->obs)
+                    # Pad edge of grid with B=0 so that the center of the grid (the source) does not have B=/=0 from interpolating the edge
+                    # Add B = 0 outside source to avoid edge effects in which the center of the grid has B =/=0 (interpolated from case when B=/=0 at the edge of the grid?)
+                    if xi < int(obsSize/2) or xi > obsSize:
+                        vect3d.x = b_void * x/d
+                        vect3d.y = b_void * y/d
+                        vect3d.z = b_void * z/d
+                    else:
+                        vect3d.x = b_ext * x/d
+                        vect3d.y = b_ext * y/d
+                        vect3d.z = b_ext * z/d
+
+                else:
+                    # B is nonzero near source
+                    # It should not matter that B=/=0 beyond the observer (near the grid edge) in this case, because if interpolated
+                    # to the center, the desired behavior is B=/=0 there anyway
+                    if xi <= int(obsSize/2): # or xi > obsSize:
+                        vect3d.x = b_ext * x/d
+                        vect3d.y = b_ext * y/d
+                        vect3d.z = b_ext * z/d
+                    else:
+                        vect3d.x = b_void * x/d
+                        vect3d.y = b_void * y/d
+                        vect3d.z = b_void * z/d
+                
+    return None
+  
+
+def initPixelizedSphere(seed):
+    # TODO
+    msg = f"Using random seed={seed}"
+    logging.info(msg)
+    print(msg)
+    np.random.seed(seed)
+    
+    return None
+
+
 def initRandomField(vgrid, Bamplitude, seed=0):
+    msg = f"Using random seed={seed}"
+    logging.info(msg)
+    print(msg)
     np.random.seed(seed)
     gridArray = vgrid.getGrid()
     nx = vgrid.getNx()
@@ -179,18 +272,40 @@ class SimCRPropa(object):
 
         self.emcasc = self.Simulation['emcasc']
 
-        for i, k in enumerate(['B', 'maxTurbScale']):
-            if isinstance(self.Bfield[k], list):
-                x = deepcopy(self.Bfield[k])
-                self.Bfield[k] = x[0]
-            elif isinstance(self.Bfield[k], float):
-                x = [self.Bfield[k]]
-            else:
-                raise ValueError(f"{self.Bfield[k]} type not understood: {type(self.Bfield[k])}")
-            if not i:
-                self._bList = x
-            else:
-                self._turbScaleList = x
+        btype = self.Bfield['type']
+        if btype != 'txt':
+            for i, k in enumerate(['B', 'gridSpacing']):
+                if isinstance(self.Bfield[btype][k], list):
+                    x = deepcopy(self.Bfield[btype][k])
+                    self.Bfield[btype][k] = x[0]
+                elif isinstance(self.Bfield[btype][k], float):
+                    x = [self.Bfield[btype][k]]
+                else:
+                    raise ValueError(f"{self.Bfield[btype][k]} type not understood: {type(self.Bfield[btype][k])}")
+                if not i:
+                    self._bList = x
+                else:
+                    self._gridSpacingList = x
+        else:
+            for i, k in enumerate(['txtFile', 'fnDescriptor', 'gridSpacing']):
+                if isinstance(self.Bfield[btype][k], list):
+                    x = deepcopy(self.Bfield[btype][k])
+                    self.Bfield[btype][k] = x[0]
+                elif isinstance(self.Bfield[btype][k], float):
+                    x = [self.Bfield[btype][k]]
+                elif isinstance(self.Bfield[btype][k], str):
+                    x = [self.Bfield[btype][k]]
+                else:
+                    raise ValueError(f"{self.Bfield[btype][k]} type not understood: {type(self.Bfield[btype][k])}")
+                # i = 0
+                if not i:
+                    self._bFileList = x
+                elif i == 1:
+                    self._gridSpacingList = x
+                else:
+                    self._bDescriptorList = x
+            # For the purpose of evaluatingthe rest of `init`
+            self._bList = self._bFileList
 
         if np.isscalar(self.Simulation['multiplicity']):
             self._multiplicity = list(np.full(len(self._bList),
@@ -310,13 +425,13 @@ class SimCRPropa(object):
         # append options to file path
         self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['basedir'],
                                 f"z{self.Source['z']:.3f}"))
-        if self.Source.get('source_morphology', 'cone') == 'cone':
+        if self.Source['source_morphology'] == 'cone':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
                             f"th_jet{self.Source['th_jet']}/"))
-        elif self.Source.get('source_morphology', 'cone') == 'iso':
+        elif self.Source['source_morphology'] == 'iso':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
                                                 'iso/'))
-        elif self.Source.get('source_morphology', 'cone') == 'dir':
+        elif self.Source['source_morphology'] == 'dir':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
                                                 'dir/'))
         else:
@@ -326,19 +441,28 @@ class SimCRPropa(object):
         self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
                         f"spec{self.Source['useSpectrum']:d}/"))
 
+        # This is read from a loop
         self.Bfield['B'] = self._bList[idB]
-        self.Bfield['maxTurbScale'] = self._turbScaleList[idL]
+        self.Bfield['gridSpacing'] = self._gridSpacingList[idL]
         solver = self.Simulation['propagation']
         solver_dict = {'CK': 'cash_karp', 'BP': 'boris_push'}
 
         if self.Bfield['type'] == 'turbulence':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                f"{solver_dict[solver]}/Bturb{self.Bfield['B']:.2e}/q{self.Bfield['turbIndex']:.2f}/scale{self.Bfield['maxTurbScale']:.2f}/"))
-        elif self.Bfield['type'] =='cell':
+                f"{solver_dict[solver]}/Bturb{self.Bfield['B']:.2e}/q{self.Bfield['turbulence']['turbIndex']:.2f}/scale{self.Bfield['gridSpacing']:.2f}/maxStep{self.Simulation['maxStepLength']}"))
+        elif self.Bfield['type'] == 'cell':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                f"{solver_dict[solver]}/Bcell{self.Bfield['B']:.2e}/scale{self.Bfield['maxTurbScale']:.2f}/"))
+                f"{solver_dict[solver]}/Bcell{self.Bfield['B']:.2e}/scale{self.Bfield['gridSpacing']:.2f}/maxStep{self.Simulation['maxStepLength']}"))
+        elif self.Bfield['type'] == 'geo':
+            self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'], 
+                                                          solver_dict[solver], 'Bgeo', f"{self.Bfield['geo']['descriptor']}_filled", 
+                                                          f"bvoid{self.Bfield['b_void']}_bext{self.Bfield['geo']['B']}", 
+                                                          f"maxStep{self.Simulation['maxStepLength']}"))
+        elif self.Bfield['type'] == 'txt':
+            self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'], 
+                                                          solver_dict[solver], 'Btxt', self.Bfield['txt']['fnDescriptor'], f"maxStep{self.Simulation['maxStepLength']}"))
         else:
-            raise ValueError(f"Bfield type must be either 'cell' or 'turbulence' not {self.Bfiel['type']}")
+            raise ValueError(f"Bfield type must be either 'cell' or 'turbulence' or 'txt' not {self.Bfield['type']}")
         
 
         self.photonoutputfile = str(path.join(self.FileIO['outdir'], self.PhotonOutName))
@@ -354,73 +478,125 @@ class SimCRPropa(object):
         return
 
     def _create_bfield(self):
-        """Set up simulation volume and magnetic field"""
-        boxOrigin = Vector3d(0, 0, 0)
-        boxSpacing = self.Bfield['boxSize'] * Mpc / self.Bfield['NBgrid']
-        logging.info(f'Box spacing for B field: {boxSpacing / Mpc} Mpc')
+        """Set up simulation volume and magnetic field.
+        PUT ALL UNITS IN SI."""
+        # Origin for magnetic field grid, in all cases
+        logging.info(f"Setting up B field with type: {self.Bfield['type'] }")
+        gridOrigin = Vector3d(0, 0, 0)
 
+        if self.Bfield['type'] == 'cell':
+            #>>> 1*Mpc
+            #   3.085677581491367e+22
+            #   3.085677581491367e+22 meters = 1 Mpc
+            #   THEREFORE x*Mpc converts the x (Mpc) to meters
+            #   I believe SI units are used within CRPropa
+            # >>> 1/Mpc
+            #   3.240779289444365e-23
+            #   3.240779289444365e-23 Mpc = 1 meter
+            #   THEREFORE x/Mpc converts x (meters) to Mpc
+            # >>> Mpc
+            #   3.085677581491367e+22           
+            gridSpacingMpcImplicit = self.Bfield['cell']['gridSpacing']
+            gridSpacingMeters = gridSpacingMpcImplicit * Mpc
+            # Number of grid cells to reach the observer sphere from the source
+            # redshift2ComovingDistance returns a number in meters; convert to Mpc by diving by Mpc
+            gridSize = int(np.ceil(redshift2ComovingDistance(self.Source['z']) / Mpc / gridSpacingMpcImplicit ))
+            # floating point 3D vector grid 
+            vgrid = Grid3f(gridOrigin,
+                           gridSize,
+                           gridSpacingMeters)
+            initRandomField(vgrid, self.Bfield['cell']['B'] * gauss, seed=self.Bfield['cell']['seed'])
+            self.bField = MagneticFieldGrid(vgrid)
+            self.__extentMeters = gridSize * gridSpacingMeters
+            logging.info(f"Box spacing for cell-like B field: {gridSpacingMpcImplicit} Mpc with {gridSize}^3 cells")
+            logging.info('B field initialized')
+
+        if self.Bfield['type'] == 'geo':
+            # Create grid
+            gridSpacingMpcImplicit = self.Bfield['geo']['gridSpacing']
+            gridSpacingMeters = gridSpacingMpcImplicit * Mpc
+            # Number of cells to pad grid to avoid edge effects
+            gridPad = 2
+            obsSize = int(np.ceil(redshift2ComovingDistance(self.Source['z']) / Mpc / gridSpacingMpcImplicit ))
+            gridSize = obsSize + gridPad
+            if gridSize % 2 != 0:
+                msg = f"The grid size {gridSize} does not have an even length to divide in half. Increasing the grid size by 1."
+                logging.warning(msg)
+                print(msg)
+                gridSize += 1
+            vgrid = Grid3f(gridOrigin,
+                    gridSize,
+                    gridSpacingMeters)
+            # Fill grid with vector values
+            if self.Bfield['geo']['descriptor'] == 'outer_rectangular_prism':
+                init_rectangular_prism_bfield(field_zero_near_origin=True,
+                                              vgrid=vgrid, obsSize=obsSize, b_void=self.Bfield['b_void']*gauss, b_ext=self.Bfield['geo']['B']*gauss, seed=self.Bfield['geo']['seed'])
+            elif self.Bfield['geo']['descriptor'] == 'inner_rectangular_prism':
+                init_rectangular_prism_bfield(field_zero_near_origin=False, 
+                                              vgrid=vgrid, obsSize=obsSize, b_void=self.Bfield['b_void']*gauss, b_ext=self.Bfield['geo']['B']*gauss, seed=self.Bfield['geo']['seed'])
+            else:
+                import sys
+                sys.exit(f"Unrecognized type {self.Bfield['geo']['descriptor']}")
+            # Create CRPropa magnetic field
+            # Base field (positive x, y, z coordinates)
+            bField0 = MagneticFieldGrid(vgrid)
+            self.__extentMeters = gridSize * gridSpacingMeters
+            self.bField = PeriodicMagneticField(bField0, Vector3d(self.__extentMeters), gridOrigin, bool(self.Bfield['geo']['reflective']))
+   
+        if self.Bfield['type'] == 'txt':
+            fnTxt = self.Bfield['txt']['txtFile']
+            gridSpacingMpcImplicit = self.Bfield['txt']['gridSpacing']  # Implicit/implied units of Mpc
+            gridSpacingMeters = gridSpacingMpcImplicit * Mpc
+            # Get size of grid; the number of grid cells per side of the cube
+            with open(fnTxt) as f:
+                lines = f.readlines()
+                num_lines = len(lines)
+            gridSize = int(round(num_lines**(1.0/3.0)))
+            #  origin, N, spacing; boxSize = length of each size of individual cells: boxSize
+            gridprops = GridProperties(gridOrigin, gridSize, gridSpacingMeters)
+            vgrid = Grid3f(gridprops)
+            loadGridFromTxt(vgrid, fnTxt)
+            # Base magnetic field grid. Boundary conditions are applied to this.
+            bField0 = MagneticFieldGrid(vgrid)
+            # __extent has units of Mpc. From `gridSpacing`.
+            self.__extentMeters =  gridSize * gridSpacingMeters
+            # args: field, extends, origin, reflective
+            if self.Bfield['txt']['reflective']:
+                self.bField = PeriodicMagneticField(bField0, Vector3d(self.__extentMeters), gridOrigin, True)
+            else:
+                # Periodic; reflective=False
+                self.bField = PeriodicMagneticField(bField0, Vector3d(self.__extentMeters), gridOrigin, False)
+            if self.__extentMeters < redshift2ComovingDistance(self.config['Source']['z'])/Mpc:
+                logging.error(f"The grid extent {self.__extentMeters/Mpc} Mpc is less than the comoving distance to the source {redshift2ComovingDistance(self.config['Source']['z'])/Mpc}")
+            logging.info(f"B field initialized with file {fnTxt}, {gridSize} cells each of length {gridSpacingMpcImplicit} Mpc with reflective={self.Bfield['txt']['reflective']}")
+            logging.info(f"Base grid extent {self.__extentMeters/Mpc} Mpc for comoving distance {redshift2ComovingDistance(self.config['Source']['z'])/Mpc} Mpc.")
+
+        # Not in use so not tested
         if self.Bfield['type'] == 'turbulence':
-            print(2. * boxSpacing / Mpc, self.Bfield['maxTurbScale'])
-            turbSpectrum = SimpleTurbulenceSpectrum(self.Bfield['B'] * gauss,  # Brms
-                                                    2. * boxSpacing,  #lMin
-                                                    self.Bfield['maxTurbScale'] * Mpc,  #lMax
-                                                    self.Bfield['turbIndex'])  #sIndex)
-
-            gridprops = GridProperties(boxOrigin,
-                                       self.Bfield['NBgrid'],
-                                       boxSpacing)
-
-            self.bField = SimpleGridTurbulence(turbSpectrum, gridprops, self.Bfield['seed'])
-
-
-            #vgrid = Grid3f(boxOrigin,
-            #               self.Bfield['NBgrid'],
-            #               boxSpacing)
-            #initTurbulence(vgrid, self.Bfield['B'] * gauss, 
-            #                2 * boxSpacing, 
-            #                self.Bfield['maxTurbScale'] * Mpc, 
-            #                self.Bfield['turbIndex'],
-            #                self.Bfield['seed'])
-            #bField0 = MagneticFieldGrid(vgrid)
-            #self.bField = PeriodicMagneticField(bField0,
-            #        Vector3d(self.Bfield['periodicity']* Mpc), Vector3d(0), False)
-
-            self.__extent = self.Bfield['boxSize'] * Mpc
+            gridSpacingMpcImplicit = self.Bfield['turbulence']['gridSpacing'] * Mpc
+            gridSize = int(np.ceil(redshift2ComovingDistance(self.Source['z'])/ gridSpacingMpcImplicit / Mpc))
+            # floating point 3D vector grid 
+            turbSpectrum = SimpleTurbulenceSpectrum(self.Bfield['turbulence']['B'] * gauss,  # Brms
+                                                    2. * gridSpacingMpcImplicit,  #lMin
+                                                    self.Bfield['turbulence']['maxTurbScale'] * Mpc,  #lMax
+                                                    self.Bfield['turbulence']['turbIndex'])  #sIndex)
+            gridprops = GridProperties(gridOrigin,
+                                       gridSize,
+                                       gridSpacingMpcImplicit)
+            self.bField = SimpleGridTurbulence(turbSpectrum, gridprops, self.Bfield['turbulence']['seed'])
+            self.__extentMeters = gridSpacingMpcImplicit
             logging.info('B field initialized')
             logging.info(f'Lc = {self.bField.getCorrelationLength() / kpc} kpc')  # correlation length, input in kpc
 
-        if self.Bfield['type'] == 'cell':
-            logging.info(f"Box spacing for cell-like B field: {self.Bfield['maxTurbScale']} Mpc")
-            gridSpacing = self.Bfield['maxTurbScale'] * Mpc
-            if self.Bfield['NBgrid'] == 0:
-                gridSize = int(np.ceil(redshift2ComovingDistance(self.Source['z'])/\
-                                                self.Bfield['maxTurbScale'] / Mpc))
-            else:
-                gridSize = self.Bfield['NBgrid']
-
-            # init 
-            # floating point 3D vector grid 
-            vgrid = Grid3f(boxOrigin,
-                           gridSize,
-                           gridSpacing)
-
-            initRandomField(vgrid, self.Bfield['B'] * gauss, seed=self.Bfield['seed'])
-            self.bField = MagneticFieldGrid(vgrid)
-            self.__extent = int(np.ceil(redshift2ComovingDistance(self.Source['z'])/\
-                                    self.Bfield['maxTurbScale'] / Mpc)) \
-                                    * self.Bfield['maxTurbScale'] * Mpc
-            logging.info('B field initialized')
-
-
-        logging.info(f'vgrid extension: {self.__extent / Mpc} Mpc')
         try:
             logging.info(f'<B^2> = {self.bField.getBrms() / nG} nG')   # RMS
             logging.info(f'<|B|> = {self.bField.getMeanFieldStrength() / nG} nG')  # mean
         except AttributeError:
             pass
         logging.info(f'B(10 Mpc, 0, 0)={self.bField.getField(Vector3d(10,0,0) * Mpc) / nG} nG')
+        logging.info(f'vgrid extension: {self.__extentMeters/Mpc} Mpc')
         return
-    
+
 
     def _create_electron_positron_observer(self):
         """Set up the observer for the simulation. Observe electrons and positrons."""
@@ -472,7 +648,6 @@ class SimCRPropa(object):
 
         logging.info('Electron observer and output initialized')
         return
-
     
 
     def _create_photon_observer(self):
@@ -492,6 +667,8 @@ class SimCRPropa(object):
         self.photon_observer.add(ObserverNucleusVeto())
         #ObserverNucleusVeto
         #ObserverTimeEvolution
+
+        self.photon_observer.setDeactivateOnDetection(True)
 
         logging.info(f'Saving photon output to {self.photonoutputfile}')
         if self.Simulation.get('outputtype', 'ascii') == 'ascii':
@@ -513,6 +690,9 @@ class SimCRPropa(object):
         self.photon_output.enable(Output.SourceDirectionColumn)
         self.photon_output.enable(Output.SourcePositionColumn)
         self.photon_output.enable(Output.WeightColumn)
+
+        if self.Simulation['CandidateTagColumn']:
+            self.photon_output.enable(Output.CandidateTagColumn)
 
         self.photon_output.disable(Output.RedshiftColumn)
         self.photon_output.disable(Output.CreatedDirectionColumn)
@@ -539,14 +719,16 @@ class SimCRPropa(object):
             # obs position same as source position for LargeSphere Observer
             self.source.add(SourcePosition(obsPosition))
             # emission cone towards positive x-axis
-            if self.Source.get('source_morphology', 'cone') == 'cone':
+            if self.Source['source_morphology'] == 'cone':
                 self.source.add(SourceEmissionCone(
                     Vector3d(np.cos(np.radians(self.Observer['obsAngle'])), 
                              np.sin(np.radians(self.Observer['obsAngle'])), 0), 
+                             # Convert deg to rad bc:
+                             # ss << "half-opening angle = " << aperture << " rad\n";
                              np.radians(self.Source['th_jet'])))
-            elif self.Source.get('source_morphology', 'cone') == 'iso':
+            elif self.Source['source_morphology'] == 'iso':
                 self.source.add(SourceIsotropicEmission())
-            elif self.Source.get('source_morphology', 'cone') == 'dir':
+            elif self.Source['source_morphology'] == 'dir':
                 self.source.add(SourceDirection(
                                     Vector3d(np.cos(np.radians(self.Observer['obsAngle'])), 
                                         np.sin(np.radians(self.Observer['obsAngle'])), 0)
@@ -597,56 +779,45 @@ class SimCRPropa(object):
         else:
             raise ValueError("unknown propagation module chosen")
 
-        thinning = self.Simulation.get('thinning', 0.)
+        # Track all particles
+        thinning = self.Simulation['thinning']
         # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
         #m.add(Redshift())
         # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
         # Extends to negative redshift values to allow for symmetric time windows around z=0
-        if self.Simulation.get('include_z_evol', True):
+        if self.Simulation['include_z_evol']:
             self.m.add(FutureRedshift())
 
-        self.m.add(EMInverseComptonScattering(CMB(), True, thinning))
-        if self.Simulation.get('include_CMB', True):
-            # this is a bit counter intuitive here, but I just want to 
-            # make a comparison to all the other codes by excluding the EBL here
-            self.m.add(EMInverseComptonScattering(self._EBL(), True, thinning))
-        # EMPairProduction:  electron-pair production of cosmic ray photons 
-        #with background photons: gamma + gamma_b -> e+ + e- (Breit-Wheeler process).
-        # EMPairProduction(PhotonField photonField = CMB, bool haveElectrons = false,double limit = 0.1 ), 
-        #if haveElectrons = true, electron positron pair is created
-        # EMInverComptonScattering(PhotonField photonField = CMB,bool havePhotons = false,double limit = 0.1 ), 
-        #if havePhotons = True, photons are created
-        # also availableL EMDoublePairProduction, EMTripletPairProduction
-        try:
-            # CRpropa version with 
-            # possibility to deactivate small angle approximation
-            self.m.add(EMPairProduction(self._EBL(), True, thinning, self.Simulation.get('forward_approx', True)))
-            logging.info(f"Using forward approx: {self.Simulation.get('forward_approx', True)} (if this is false, simulation will be slower!)")
-        except:
-            self.m.add(EMPairProduction(self._EBL(), True, thinning))
-
-        if self.Simulation.get('include_higher_order_pp', False):
-            self.m.add(EMDoublePairProduction(self._EBL(), True, thinning))
-            self.m.add(EMTripletPairProduction(self._EBL(), True, thinning))
-
-        if self.Simulation.get('include_CMB', True):
-            self.m.add(EMPairProduction(CMB(), True))
-            if self.Simulation.get('include_higher_order_pp', False):
+        # Interactions involving CMB
+        if self.Simulation['include_CMB']:
+            # True means secondaries are included
+            self.m.add(EMInverseComptonScattering(CMB(), True, thinning))
+            # EMPairProduction:  electron-pair production of cosmic ray photons 
+            # with background photons: gamma + gamma_b -> e+ + e- (Breit-Wheeler process).
+            self.m.add(EMPairProduction(CMB(), True, thinning))
+            if self.Simulation['include_higher_order_pp']:
                 self.m.add(EMDoublePairProduction(CMB(), True, thinning))
                 self.m.add(EMTripletPairProduction(CMB(), True, thinning))
 
-        # for photo-pion production: 
-        #PhotoPionProduction (PhotonField photonField=CMB, bool photons=false, bool neutrinos=false, 
-        # bool antiNucleons=false, double limit=0.1, bool haveRedshiftDependence=false)
-        # for photo disentigration:
-        #PhotoDisintegration (PhotonField photonField=CMB, bool havePhotons=false, double limit=0.1)
-        # for nuclear decay:
-        #NuclearDecay (bool electrons=false, bool photons=false, bool neutrinos=false, double limit=0.1)
+        if self.Simulation['include_EBL']:
+            self.m.add(EMInverseComptonScattering(self._EBL(), True, thinning))
+            try:
+                # CRpropa version with 
+                # possibility to deactivate small angle approximation
+                self.m.add(EMPairProduction(self._EBL(), True, thinning, self.Simulation['forward_approx']))
+                logging.info(f"Using forward approx: {self.Simulation.get('forward_approx', True)} (if this is false, simulation will be slower!)")
+            except:
+                self.m.add(EMPairProduction(self._EBL(), True, thinning))
+
+            if self.Simulation['include_higher_order_pp']:
+                self.m.add(EMDoublePairProduction(self._EBL(), True, thinning))
+                self.m.add(EMTripletPairProduction(self._EBL(), True, thinning))
+
         # Synchrotron radiation: 
         #SynchrotronRadiation (ref_ptr< MagneticField > field, bool havePhotons=false, double limit=0.1) or 
         #SynchrotronRadiation (double Brms=0, bool havePhotons=false, double limit=0.1) ; 
         #Large number of particles can cause memory problems!
-        if self.Simulation.get('include_sync', True):
+        if self.Simulation['include_sync']:
             self.m.add(SynchrotronRadiation(self.bField, True, thinning))
         logging.info('modules initialized')
         return
@@ -791,7 +962,7 @@ class SimCRPropa(object):
             self.m.add(MinimumRedshift(-1. * self.Observer['zmin']))
 
         # apply cut on rigidity for EM cascades
-        rigidity = self.BreakConditions.get('minRigidity', 50.)
+        rigidity = self.BreakConditions['minRigidity']
         # calc min rigidity of electron that produces average energy 
         # larger than MinimumEnergy
         # gamma factor of electron is given by gamma^2 = MinimumEnergy / mean CMB energy * 3 / 4
@@ -843,6 +1014,7 @@ class SimCRPropa(object):
     def run(self,  overwrite=False, force_combine=False, overwrite_combine=False,
         **kwargs):
         """Submit simulation jobs"""
+        logging.info("Submitting job")
         option = ""   # extra options passed to run crpropa sim script
 
         script = path.join(path.abspath(path.dirname(simCRpropa.__file__)), 'scripts/run_crpropa_em_cascade.py')
@@ -850,17 +1022,28 @@ class SimCRPropa(object):
 
         if not path.isfile(script):
             raise IOError(f"Script {script} not found!")
-
+        
+        # FIXME this trace is never reached
+        import pdb; pdb.set_trace()
+        
+        logging.info("Looping over:")
+        logging.info(self._bList, self._gridSpacingList)
         for ib, b in enumerate(self._bList):
-            for il, l in enumerate(self._turbScaleList):
+            for il, l in enumerate(self._gridSpacingList):
                 for it, t in enumerate(self._th_jetList):
                     for iz, z in enumerate(self._zList):
                         njobs = int(self._multiplicity[ib])
                         self.Simulation['multiplicity'] = int(self._multiplicity[ib])
                         self.Simulation['minStepLength'] = self._minStepLength[ib]
                         self.Simulation.pop('minTresol', None)  # delete resolution, as step length is set
-                        self.Bfield['B'] = b
-                        self.Bfield['maxTurbScale'] = l
+                        self.Bfield['gridSpacing'] = l
+                        if self.Bfield['type'] != 'txt':
+                            self.Bfield['B'] = b
+                            
+                        else:
+                            # `b` is a filename in the case of type=txt
+                            # TODO retrieve filename and pass it somewhere?
+                            self.Bfield['B'] = 'txt'
                         self.Source['th_jet'] = t
                         self.Source['z'] = z
                         self.D = redshift2ComovingDistance(self.Source['z']) # comoving source distance
