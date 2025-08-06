@@ -1,6 +1,6 @@
 FileIO:
-    outdir: /hb/home/mspletts/simCRPropaVoids/output/tests
-    basedir: /hb/home/mspletts/simCRPropaVoids/output/tests
+    outdir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/tests
+    basedir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/tests
 
 
 Cosmology:
@@ -12,7 +12,7 @@ Cosmology:
 Simulation:
     # Number of particles simulated/injected
     # MUST be formatted as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-    Nbatch: 1.e+2 
+    Nbatch: 1.e+2
 
     # Tolerance; numerical precision. 
     # This is used in the module that solves the equations of motion for a charged particle in a magnetic field.
@@ -23,7 +23,7 @@ Simulation:
     # Options:
     #   - 'CK' (Cash Karp)
     #   - 'BP' (Boris push)
-    propagation: CK
+    propagation: BP
 
     # Minimum step length (in *pc*). Used in solver for equations of motion for a charged particle in a magnetic field.
     # "Constraints on the intergalactic magnetic field using Fermi -LAT and H.E.S.S. blazar observations" used:
@@ -31,10 +31,13 @@ Simulation:
     minStepLength: 0.3  # pc; paper says "set the minimum step length of the simulation such that time delays t down to 1 yr can be resolved" x=ct
 
     # Maximum step length (in *Mpc*). Used in solver for equations of motion for a charged particle in a magnetic field.
-    maxStepLength: 1
+    maxStepLength: 50.0
 
     # If True, simulations includes CMB as a background field to modules/interactions
     include_CMB: True
+
+    # If True, simulations includes EBL as a background field to modules/interactions
+    include_EBL: True
 
     # Used in crpropa.EMPairProduction with EBL (not CMB). This speeds up the simulation.
     # `sim_crpropa.py` states when this is True it speeds up the simulations, by using small angle approximation.
@@ -47,10 +50,20 @@ Simulation:
     # If True, simulations includes synchrotron radiation interactions / energy losses etc
     include_sync: True
 
+    # "Updates (??) redshift and applies adiabatic energy loss according to the traveled distance.""
+    # https://crpropa.github.io/CRPropa3/api/classcrpropa_1_1FutureRedshift.html#class-futureredshift
+    include_z_evol: True
+
+    # Thinning = 0 tracks all particles
+    thinning: 0.
+
+    # If True, includes interaction tag in output file
+    CandidateTagColumn : True
+
     # Below are not in use by me, and set to None to confirm.
     cpu_n: None  # Does nothing seemingly. Set this in slurm script?
-    multiplicity: None  # Number of times `Nbatch` particles are simulated. Does nothing in my configurations.
-    emcasc: None  # Used if the injected spectrum is a CR (not photon) spectrum. If injecting a photon spectrum, the EM cascade is setup in a separate function, and this key is never evaluated.
+    multiplicity: 1  # Number of times `Nbatch` particles are simulated. Does nothing in my configurations. I think this is used if there is a list of magnetic fields (`B` keys)
+    emcasc: None  # Used if the injected spectrum is a CR (not photon) spectrum. If injecting a photon spectrum, the EM cascade is setup in a separate function.
 
 
 Source:
@@ -66,11 +79,12 @@ Source:
     #   - 'dir' (crpropa.SourceDirection).
     # If the direction of the source emission (if using `source_morphology=cone` or `source_morphology=dir`) is set by x=cos(`obsAngle`), y=sin(`obsAngle`), z=0.
     # The source is placed at (`obsPosX`, `obsPosY`, `obsPosZ`).
-    source_morphology: cone  # Source is a cone with opening angle `th_jet`. Other options: 'iso' (crpropa.SourceIsotropicEmission), 'dir' (crpropa.SourceDirection).
+    source_morphology: cone
 
     # If `source_morphology=cone` this is the jet opening angle (in degrees). If `source_morphology!=cone` this is not used in setting up the source.
     # NOTE THIS IS ALSO IN `Observer` SECTION, but only this one appears to be used.
-    th_jet: 0.
+    # This is the full opening angle; aperture; not measured from x-axis
+    th_jet: 0.1
 
     # If True, injects/simulates a *powerlaw* spectrum with `index` frrom `Emin` to `Emax`. If False, injects delta function with energy `Energy`
     useSpectrum: True 
@@ -138,17 +152,67 @@ BreakConditions:
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
     Emin: 1.e+8 
 
+    # Minimum rigidity in gigavolts
+    minRigidity: 50.0
+
 
 Bfield:
-    # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-    B: 1.e-17 # rms of B field in Gauss
-    seed: 2308 # random seed for B field
-    type: cell # either cell or turbulence or txtfile
-    NBgrid: 200 # number of B-field cells (turbulent field only)
-    boxSize: 100 # box size for vector grid in Mpc (turbulent field only)
-    maxTurbScale: 50. # maximum turbulence scale in Mpc / cell size for cell-like field
-    turbIndex: -3.667 # turbulence index, default - 11/3
-    periodicity: 4000. # length of periodic box in Mpc
+    # Type of magnetic field
+    # Options:
+    #   - cell (fixed magnitude `B` with random unit vector direction in each grid cell)
+    #   - turbulence (turbulent field...)
+    #   - geo (magnetic field values with some geometry e.g. sphere, rectangular prism, etc)
+    type: geo
+
+    # Magnetic field in voids in Gauss
+    b_void: 0.0
+    # b_void: 1.e-20
+
+    # Only read if `type=cell`
+    cell:
+        # Fixed amplitude (in Gauss) for B field
+        # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+        B: 1.e-13
+        # Side length of each side of each grid cell (in Mpc)
+        # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
+        gridSpacing: 50.0
+        # Seed for random direction of B field
+        seed: 2308 
+
+     # Only read if `type=geo`
+    geo:
+        # Fixed amplitude (in Gauss) for B field
+        # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+        B: 1.e-13
+        # Side length of each side of each grid cell (in Mpc)
+        # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
+        # Must be a float?
+        gridSpacing: 50.0
+        # Seed for random direction of B field
+        seed: 2308 
+        # Description which will be used in output directory name
+        # In addition, this MUST have a matching key and function in sim_crpropa.py
+        # Options:
+        #   - outer_sphere TODO
+        #       Outer spherical shell (near observer) has B=/=0, and inner shell (near source) has B=0
+        #   - inner_sphere TODO
+        #       Inner spherical shell has B=/=0, and outer shell has B=0
+        #   - outer_rectangular_prism
+        #       Outer rectangular prism (near observer) has B=/=0, and inner (near source) has B=0
+        #   - inner_rectangular_prism
+        #       Inner rectangular prism (near observer) has B=/=0, and outer (near source) has B=0
+        descriptor: inner_rectangular_prism
+        reflective: True
+
+       
+    # Only read if `type=turbulent`
+    turbulence:
+        B:
+        gridSpacing:
+        NBgrid:
+        maxTurbScale: 50. # maximum turbulence scale in Mpc
+        turbIndex: -3.667 # turbulence index, default - 11/3
+        seed: 2308 
 
     # CRPropa EBL class/model to use
     EBL: IRB_Saldana21
