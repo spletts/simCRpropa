@@ -10,14 +10,14 @@ from astropy import constants as c
 from astropy.cosmology import FlatLambdaCDM, Planck15
 from simCRpropa import rotations as rot
 from gammapy.maps import WcsMap, Map, MapAxis, WcsGeom
-from scipy.integrate import simps
+from scipy.integrate import simpson as simps
 from scipy.ndimage import rotate
 from scipy.interpolate import UnivariateSpline, interp1d
 from regions import CircleSkyRegion
 from astropy.coordinates import Angle
 from gammapy import __version__ as gpv
 from astropy.convolution import Tophat2DKernel, Gaussian2DKernel
-from collections import Iterable
+from collections.abc import Iterable
 
 if float(gpv.split('.')[1]) > 16 or float(gpv.split('.')[0]) > 0:
     from gammapy.utils.array import scale_cube
@@ -225,6 +225,8 @@ def parallel_transport(data, jet_opening_angle, observing_angle=0):
                               jet_phi_angle=0.)
     data['mask'] = mask
     data['Protsph'] = np.vstack([pnewsph[0, :],
+                                 # Probing intergalactic magnetic fields with simulations of electromagnetic cascades
+                                 # Fig 2
                                  np.rad2deg(pnewsph[2, :] * np.sin(pnewsph[1, :])),
                                  np.rad2deg(pnewsph[2, :] * np.cos(pnewsph[1, :])) + 90.
                                  ])
@@ -1279,6 +1281,7 @@ class CascMap(object):
         return integral * integral_unit
 
 
+    # Email from A. Acharyya Apr 27 2025
     def plot_spectrum(self,
                       radius=None,
                       on_region=None,
@@ -1292,8 +1295,8 @@ class CascMap(object):
                       fig=None):
         """
         Plot the cascade spectrum
-
-
+ 
+ 
         :param on_region: extraction region or None
             region in which cascade is contribution is summed up
         :param radius: str or None
@@ -1302,42 +1305,42 @@ class CascMap(object):
         :return:
         """
         import matplotlib.pyplot as plt
-
+ 
         plot_casc = kwargs_casc.pop("plot", True)
         plot_prim = kwargs_prim.pop("plot", True)
         plot_tot = kwargs_tot.pop("plot", True)
-
+ 
         kwargs_casc.setdefault("label", r"Cascade $\gamma$-ray spectrum")
         kwargs_prim.setdefault("label", r"Primary $\gamma$-ray spectrum")
         kwargs_tot.setdefault("label", r"Total $\gamma$-ray spectrum")
-
+ 
         kwargs_casc.setdefault("marker", ".")
         kwargs_prim.setdefault("marker", ".")
         kwargs_tot.setdefault("marker", ".")
-
+ 
         if fig is None:
             fig = plt.figure(figsize=(6,4))
         if ax is None:
             ax = fig.add_subplot(111)
-
+ 
         if radius is not None:
             on_region = CircleSkyRegion(self._casc_obs.geom.center_skydir,
                                         radius=Angle(radius))
-
+ 
         spec_halo = self.get_obs_spectrum(
             region=on_region
             )
-
+ 
         spec_tot = self.get_obs_spectrum(
             region=on_region,
             add_primary=True
             )
-
+ 
         energy_halo = spec_halo.geom.axes['energy_true']
         energy_tot = spec_tot.geom.axes['energy_true']
-
+ 
         flux_unit_conversion = (spec_halo.quantity.unit * energy_halo.unit ** 2.).to(E2dNdE_unit)
-
+ 
         # plot cascade
         if plot_casc:
             if plot_errorbar:
@@ -1347,11 +1350,15 @@ class CascMap(object):
                             **kwargs_casc
                             )
             else:
+                # added output of energies here
+                final_e= (energy_halo.center.to(energy_unit).value)
+                final_e2_dn_de= (spec_halo.data[:, 0, 0] * energy_halo.center.value ** 2. * flux_unit_conversion)
+               
                 ax.plot(energy_halo.center.to(energy_unit).value,
                         spec_halo.data[:, 0, 0] * energy_halo.center.value ** 2. * flux_unit_conversion,
                         **kwargs_casc
                         )
-
+ 
         if plot_prim and self._primary is not None:
             if plot_errorbar:
                 ax.errorbar(self._primary.energy_obs_frame.center.to(energy_unit).value,
@@ -1366,7 +1373,7 @@ class CascMap(object):
                         flux_unit_conversion,
                         **kwargs_prim
                         )
-
+ 
         if plot_tot and self._primary is not None:
             if plot_errorbar:
                 ax.errorbar(energy_tot.center.to(energy_unit).value,
@@ -1379,14 +1386,126 @@ class CascMap(object):
                         spec_tot.data[:, 0, 0] * energy_tot.center.value ** 2. * flux_unit_conversion,
                         **kwargs_tot
                         )
-
+ 
         ax.set_xscale('log')
         ax.set_yscale('log')
-
+ 
         ax.set_xlabel("Energy ({0:s})".format(energy_unit))
         ax.set_ylabel("$E^2 dN/dE$ ({0:s})".format(E2dNdE_unit))
+ 
+        return fig, ax, final_e, final_e2_dn_de #I have added the last two, final_e and final_e2_dn_de. Comment out if creating problems
 
-        return fig, ax
+
+    # def plot_spectrum(self,
+    #                   radius=None,
+    #                   on_region=None,
+    #                   energy_unit="GeV",
+    #                   E2dNdE_unit="TeV cm-2 s-1",
+    #                   kwargs_casc={},
+    #                   kwargs_tot={},
+    #                   kwargs_prim={},
+    #                   plot_errorbar=True,
+    #                   ax=None,
+    #                   fig=None):
+    #     """
+    #     Plot the cascade spectrum
+
+
+    #     :param on_region: extraction region or None
+    #         region in which cascade is contribution is summed up
+    #     :param radius: str or None
+    #         if string, should be the angle of circular extraction region compatible with Angle, e.g., "0.1 deg".
+    #         Will overwrite on_region.
+    #     :return:
+    #     """
+    #     import matplotlib.pyplot as plt
+
+    #     plot_casc = kwargs_casc.pop("plot", True)
+    #     plot_prim = kwargs_prim.pop("plot", True)
+    #     plot_tot = kwargs_tot.pop("plot", True)
+
+    #     kwargs_casc.setdefault("label", r"Cascade $\gamma$-ray spectrum")
+    #     kwargs_prim.setdefault("label", r"Primary $\gamma$-ray spectrum")
+    #     kwargs_tot.setdefault("label", r"Total $\gamma$-ray spectrum")
+
+    #     kwargs_casc.setdefault("marker", ".")
+    #     kwargs_prim.setdefault("marker", ".")
+    #     kwargs_tot.setdefault("marker", ".")
+
+    #     if fig is None:
+    #         fig = plt.figure(figsize=(6,4))
+    #     if ax is None:
+    #         ax = fig.add_subplot(111)
+
+    #     if radius is not None:
+    #         on_region = CircleSkyRegion(self._casc_obs.geom.center_skydir,
+    #                                     radius=Angle(radius))
+
+    #     spec_halo = self.get_obs_spectrum(
+    #         region=on_region
+    #         )
+
+    #     spec_tot = self.get_obs_spectrum(
+    #         region=on_region,
+    #         add_primary=True
+    #         )
+
+    #     energy_halo = spec_halo.geom.axes['energy_true']
+    #     energy_tot = spec_tot.geom.axes['energy_true']
+
+    #     flux_unit_conversion = (spec_halo.quantity.unit * energy_halo.unit ** 2.).to(E2dNdE_unit)
+
+    #     # plot cascade
+    #     if plot_casc:
+    #         if plot_errorbar:
+    #             ax.errorbar(energy_halo.center.to(energy_unit).value,
+    #                         spec_halo.data[:, 0, 0] * energy_halo.center.value ** 2. * flux_unit_conversion,
+    #                         xerr=energy_halo.bin_width.to(energy_unit).value / 2.,
+    #                         **kwargs_casc
+    #                         )
+    #         else:
+    #             ax.plot(energy_halo.center.to(energy_unit).value,
+    #                     spec_halo.data[:, 0, 0] * energy_halo.center.value ** 2. * flux_unit_conversion,
+    #                     **kwargs_casc
+    #                     )
+
+    #     if plot_prim and self._primary is not None:
+    #         if plot_errorbar:
+    #             ax.errorbar(self._primary.energy_obs_frame.center.to(energy_unit).value,
+    #                         self._primary.get_obs_spectrum().value * self._primary.energy_obs_frame.center.value ** 2. *
+    #                         flux_unit_conversion,
+    #                         xerr=self._primary.energy_obs_frame.bin_width.to(energy_unit).value / 2.,
+    #                         **kwargs_prim
+    #                         )
+    #         else:
+    #             ax.plot(self._primary.energy_gal_frame.center.to(energy_unit).value,
+    #                     self._primary.get_obs_spectrum().value * self._primary.energy_gal_frame.center.value ** 2. *
+    #                     flux_unit_conversion,
+    #                     **kwargs_prim
+    #                     )
+
+    #     if plot_tot and self._primary is not None:
+    #         if plot_errorbar:
+    #             ax.errorbar(energy_tot.center.to(energy_unit).value,
+    #                         spec_tot.data[:, 0, 0] * energy_tot.center.value ** 2. * flux_unit_conversion,
+    #                         xerr=energy_tot.bin_width.to(energy_unit).value / 2.,
+    #                         **kwargs_tot
+    #                         )
+    #         else:
+    #             ax.plot(energy_tot.center.to(energy_unit).value,
+    #                     spec_tot.data[:, 0, 0] * energy_tot.center.value ** 2. * flux_unit_conversion,
+    #                     **kwargs_tot
+    #                     )
+
+    #     ax.set_xscale('log')
+    #     ax.set_yscale('log')
+
+    #     ax.set_xlabel("Energy ({0:s})".format(energy_unit))
+    #     ax.set_ylabel("$E^2 dN/dE$ ({0:s})".format(E2dNdE_unit))
+
+    #     #return fig, ax
+    #     # Email exchange w Atreya Apr 27 2025:
+    #     return fig, ax, final_e, final_e2_dn_de #I have added the last two, final_e and final_e2_dn_de
 
 
 class ASmooth(object):

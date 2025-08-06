@@ -7,6 +7,9 @@ import logging
 import yaml
 import numpy as np
 import h5py
+import subprocess
+from astropy.table import Table
+import re
 try:
     from crpropa import *
 except:
@@ -67,7 +70,6 @@ def combine_output(outfile, overwrite = False):
         #    isinstance(conf['Source']['Emin'], np.ndarray):
         elif isinstance(conf['Source']['Emin'], Iterable):
             esteps = len(conf['Source']['Emin'])
-
 
         if not conf['Source']['useSpectrum']:
             for name in f['simEM']:                                                                        
@@ -213,7 +215,8 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
               config,
               pvec_id = [''],
               xvec_id = [''],
-              useSpectrum = False):
+              useSpectrum = False,
+              use_np=False):
     """
     Convert CRPropa Output to an HDF5 file
 
@@ -273,7 +276,6 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
         if n in ['Y','Z', 'Y0','Z0', 'Y1','Z1']: continue
         if n in ['Py','Pz', 'P0y','P0z', 'P1y','P1z']: continue
 
-
         if n in ['X' + v for v in xvec_id]:
             d = pos_vectors[['X' + v for v in xvec_id].index(n),...]
         elif n in ['P' + v + 'x' for v in pvec_id]:
@@ -284,10 +286,21 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
             else:
                 d = data[:,i]
 
-        if n.find('ID') >= 0:
-            dtype = 'i8'
+        if use_np is False:
+            if n.find('ID') >= 0:
+                dtype = 'i8'
+            elif n == 'tag':
+                dtype = 'S4' 
+                dtype = h5py.string_dtype(encoding='utf-8')
+                logging.info(f"Using string type for {n}")
+                print(f"Using string type for {n}")
+            else:
+                dtype ='f8'
         else:
-            dtype ='f8'
+            if n.find('ID') >= 0:
+                dtype = 'i8'
+            else:
+                dtype ='f8'
 
         if not useSpectrum:
             if isinstance(config['Source']['Emin'], float):
@@ -323,8 +336,11 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
                 grp["{0:s}/Ebin{1:03n}".format(n,j)].attrs['unit'] = units[n]
             logging.info("{0} Ebin{1:03} {2}".format(n,j,grp["{0:s}/Ebin{1:03n}".format(n,j)]))
         else:
-            grp.create_dataset(n, dtype = dtype,
-                data = d, compression="gzip")
+            if use_np:
+                grp.create_dataset(n, dtype = dtype, data = d, compression="gzip")
+            else:
+                # Issues reading data ... OSError: Can't synchronously write data (no appropriate function for conversion path)
+                grp.create_dataset(n, dtype = dtype, data = np.array(d, dtype=dtype), compression="gzip")
             grp[n].attrs['unit'] = units[n]
 
     intspec = grp.create_group("intspec")
@@ -338,10 +354,13 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
     h.close()
     return 
 
-def readCRPropaOutput(filename):
+def readCRPropaOutput(filename, tag_column=True, use_np=False):
     """Read the header of a CRPROPA outputfile"""
     units = OrderedDict()
-    data = np.loadtxt(filename)
+    
+    # Read with astropy to accomodate a string column which contains the tag
+    table = Table.read(filename, format='ascii.commented_header')
+    data = table.to_pandas().to_numpy()
 
     # Check if file is empty. For electron observer, it might be. 
     # If it is empty for photon observer, there is a problem in the simulation setup (e.g. break conditions)
@@ -352,40 +371,106 @@ def readCRPropaOutput(filename):
     else:
         is_empty = False
 
-        with open(filename) as h:
-            for i,l in enumerate(h.readlines()):
-                if not l[0] == '#': continue
-                if not len(l.split()): continue
-                if not i:
-                    names = l.lstrip('#').split() # get the name columns
-                # extract units
-                if l.split()[-1].find(']') >= 0:
-                    par = l.lstrip('#').split()[0][0]
-                    if float(l.split()[-2].strip('[')) == 1.:
-                        units[par] = '{0:s}'.format(l.split()[-1].strip(']'))
+    names = table.colnames
+    units = {}
+    # Parse the header manually to extract units
+    with open(filename) as f:
+        for line in f:
+            if not line.startswith('#'):
+                continue
+            parts = line.lstrip('#').split()
+            if not parts:
+                continue
+            # Look for lines with units indicated by square brackets
+            if ']' in line:
+                tokens = line.strip('#').split()
+                key = tokens[0][0]  # First letter of parameter name
+                try:
+                    scale = float(tokens[-2].strip('['))
+                    unit = tokens[-1].strip(']')
+                    if scale == 1.0:
+                        units[key] = unit
                     else:
-                        units[par] = '{0:s} {1:s}'.format(l.split()[-2].strip('['),l.split()[-1].strip(']'))
+                        units[key] = f"{scale} {unit}"
+                except (ValueError, IndexError):
+                    pass
+    # Propagate units for related columns
+    if 'X' in units:
+        for par in ['Y', 'Z']:
+            units[par] = units['X']
+    for i in range(2):
+        if f'X{i}' in names:
+            for par in [f'X{i}', f'Y{i}', f'Z{i}']:
+                units[par] = units.get('X', '')
+        if f'E{i}' in names and 'E' in units:
+            units[f'E{i}'] = units['E']
+    # Assign default empty unit if not found
+    for name in names:
+        units.setdefault(name, '')
+    # Determine data formats
+    formats = []
+    for name in names:
+        if 'ID' in name:
+            formats.append('I')  # Integer
+        elif name == 'tag':
+            formats.append(h5py.string_dtype(encoding='utf-8'))  # String
+        else:
+            formats.append('D')  # Double
+            
+    if use_np:
+        if tag_column:
+            # np.loadtxt is for same data types, so convert the one str column to int and link with dict
+            interaction_tags_str = ["EMPP", "EMDP", "EMTP", "SYNC", "EMIC", "PRIM"]
+            interaction_tags_as_int = [1, 11, 111, 2, 3, 0]
+            for i, tag in enumerate(interaction_tags_str):
+                # Replace inline
+                cmd = f"sed -i 's/{tag}/{interaction_tags_as_int[i]}/g' {filename}"
+                subprocess.run(cmd, shell=True, check=True)
+        
+        data = np.loadtxt(filename)
+        # Check if file is empty. For electron observer, it might be. 
+        # If it is empty for photon observer, there is a problem in the simulation setup (e.g. break conditions)
+        if data.size == 0:
+            logging.warning(f"File empty: {filename}")
+            is_empty = True
+            names, units, data = None, None, None
+        else:
+            is_empty = False
 
-            if 'X' in units.keys(): 
-                for par in ['Y','Z']:
-                    units[par] = units['X']
-            for i in range(2):
-                if 'X{0:n}'.format(i) in names:
-                    for par in ['X{0:n}'.format(i), 'Y{0:n}'.format(i),'Z{0:n}'.format(i)]:
+            with open(filename) as h:
+                for i,l in enumerate(h.readlines()):
+                    if not l[0] == '#': continue
+                    if not len(l.split()): continue
+                    if not i:
+                        names = l.lstrip('#').split() # get the name columns
+                    # extract units
+                    if l.split()[-1].find(']') >= 0:
+                        par = l.lstrip('#').split()[0][0]
+                        if float(l.split()[-2].strip('[')) == 1.:
+                            units[par] = '{0:s}'.format(l.split()[-1].strip(']'))
+                        else:
+                            units[par] = '{0:s} {1:s}'.format(l.split()[-2].strip('['),l.split()[-1].strip(']'))
+
+                if 'X' in units.keys(): 
+                    for par in ['Y','Z']:
                         units[par] = units['X']
-                if 'E{0:n}'.format(i) in names:
-                    units['E{0:n}'.format(i)] = units['E']
+                for i in range(2):
+                    if 'X{0:n}'.format(i) in names:
+                        for par in ['X{0:n}'.format(i), 'Y{0:n}'.format(i),'Z{0:n}'.format(i)]:
+                            units[par] = units['X']
+                    if 'E{0:n}'.format(i) in names:
+                        units['E{0:n}'.format(i)] = units['E']
 
-            formats = []
-            for i,n in enumerate(names):
-                if n.find('ID') >= 0:
-                    formats.append('I')
-                else:
-                    formats.append('D')
-                if not n in units.keys():
-                    units[n] = ''
+                formats = []
+                for i,n in enumerate(names):
+                    if n.find('ID') >= 0:
+                        formats.append('I')  # integer
+                    else:
+                        formats.append('D')  # double
+                    if not n in units.keys():
+                        units[n] = ''
 
-    return names, units, data, is_empty
+    return names, units, data, formats, is_empty
 
 
 class EMHist(object):
