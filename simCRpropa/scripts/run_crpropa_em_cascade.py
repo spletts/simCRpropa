@@ -163,6 +163,7 @@ if __name__ == '__main__':
     # limit number of used threads -- does not really work... 
     os.environ['OMP_NUM_THREADS'] = str(sim.Simulation['cpu_n'])
 
+    # TODO pass iter. for bList
     sim.setOutput(job_id)
     sim.photonoutputfile = str(path.join(tmpdir, path.basename(sim.photonoutputfile)))
     logging.info(f"writing output file to : {sim.photonoutputfile}")
@@ -187,8 +188,11 @@ if __name__ == '__main__':
     for i in range(sim.nbins):
         if not i:
             logging.info(sim.source)
+            # .m for modules
             logging.info(sim.m)
             logging.info(sim.photon_observer)
+            if config['Observer']['obsElectrons']:
+                logging.info(f"Electron observer: {sim.electron_observer}")
 
         if not sim.Source['useSpectrum']:
             sim.Source['Energy'] = sim.EeV[i]
@@ -205,6 +209,7 @@ if __name__ == '__main__':
             sim.m.setShowProgress(False)
 
         # void run(SourceInterface *source, size_t count, bool recursive = true, bool secondariesFirst = false)
+        # TODO sim.run(), then sim.m.run()?
         sim.m.run(sim.source,  int(sim.weights[i]), True, True)
         sim.photon_output.close()
         logging.info(f"Simulating bin {i + 1} / {sim.nbins} took {time.time() - t0} s")
@@ -229,15 +234,17 @@ if __name__ == '__main__':
         del sim # free memory
 
     # read the output
+    use_np = False # If True, read with np.loadtxt. If False, use astropy
     if outtype == 'ascii':
         logging.info(f"Processing {ph_outputfile}")
-        names, units, ph_data, _ = readCRPropaOutput(ph_outputfile)
+        names, units, ph_data, formats, _ = readCRPropaOutput(ph_outputfile, config['Simulation']['CandidateTagColumn'], use_np=use_np)
         ph_hfile = ph_outputfile.split(".dat")[0] + ".hdf5"
 
         col.convertOutput2Hdf5(names, units, ph_data, weights, ph_hfile, config,
                   pvec_id = ['','0'],
                   xvec_id = ['','0'],
-                  useSpectrum = useSpectrum)
+                  useSpectrum = useSpectrum,
+                  use_np=use_np)
 
         #utils.zipfiles(sim.outputfile,sim.outputfile + '.gz', nodir = True)
         utils.copy2scratch(ph_hfile, ph_outdir)
@@ -256,18 +263,20 @@ if __name__ == '__main__':
         if outtype == 'ascii':
             e_hfile = e_outputfile.split(".dat")[0] + ".hdf5"
             logging.info(f"Processing {e_outputfile} to {e_hfile} in {e_outdir}")
-            names, units, e_data, is_empty = readCRPropaOutput(e_outputfile)
+            names, units, e_data, formats, is_empty = readCRPropaOutput(e_outputfile)
 
+            # TODO although this isn't in a loop, (bc the program runs in parallel?), files routinely deleted so only one saved at a time.
+            # Therefore deleting and moving on, since electrons not of interest. This satisfied the check of electrons that reach the observer - not many (tens; with millions of photons reaching observer sphere).
             # Remove everything from this directory. Issues with timestamps on empty files not matching the time of the copied file, when using utils.copy2scratch and shutils.copy2.
             # e.g. file1 copied to dir2 produced different times via ls -ltr file1 and ls -ltr dir1/file1. 
             # Confirmed this behavior at the command line when cp file1 dir1 where the files are empty. Removing dir1/file1 then recopying produced the expected results (same time stamps)
             # The electron files are sometimes empty.
-            for file in glob(path.join(e_outdir, "*dat")):
-                    logging.info(f"Removing {file}")
-                    os.remove(file)
-            for file in glob(path.join(e_outdir, "*hdf5")):
-                    logging.info(f"Removing {file}")
-                    os.remove(file)
+            # for file in glob(path.join(e_outdir, "*dat")):
+            #         logging.info(f"Removing {file}")
+            #         os.remove(file)
+            # for file in glob(path.join(e_outdir, "*hdf5")):
+            #         logging.info(f"Removing {file}")
+            #         os.remove(file)
 
             if is_empty is False:
                 # Create hdf5 file
