@@ -1,0 +1,193 @@
+FileIO:
+    outdir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/inj_powlaw
+    basedir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/inj_powlaw
+
+
+Cosmology:
+    # h and Om selected to be the same as those used to calculate the comoving distances in the void catalog 
+    h: 0.71
+    Om: 0.27
+
+
+Simulation:
+    # Number of particles simulated/injected
+    # MUST be formatted as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    Nbatch: 1.e+3 
+
+    # Tolerance; numerical precision. 
+    # This is used in the module that solves the equations of motion for a charged particle in a magnetic field.
+    # "Constraints on the intergalactic magnetic field using Fermi -LAT and H.E.S.S. blazar observations" used 1e-9
+    tol: 1.e-9 
+
+    # Numerical method for solving equations of motion for a charged particle in a magnetic field.
+    # Options:
+    #   - 'CK' (Cash Karp)
+    #   - 'BP' (Boris push)
+    propagation: BP
+
+    # Minimum step length (in *pc*). Used in solver for equations of motion for a charged particle in a magnetic field.
+    # "Constraints on the intergalactic magnetic field using Fermi -LAT and H.E.S.S. blazar observations" used:
+    # "the minimum step length of the simulation such that time delays t down to 1 yr can be resolved" x=ct
+    minStepLength: 0.3  # pc; paper says "set the minimum step length of the simulation such that time delays t down to 1 yr can be resolved" x=ct
+
+    # Maximum step length (in *Mpc*). Used in solver for equations of motion for a charged particle in a magnetic field.
+    maxStepLength: 1.0
+
+    # If True, simulations includes CMB as a background field to modules/interactions
+    include_CMB: True
+
+    # If True, simulations includes EBL as a background field to modules/interactions
+    include_EBL: True
+
+    # Used in crpropa.EMPairProduction with EBL (not CMB). This speeds up the simulation.
+    # `sim_crpropa.py` states when this is True it speeds up the simulations, by using small angle approximation.
+    # Can't find this bool in the EMPairProduction module https://github.com/CRPropa/CRPropa3/blob/d39003b5501698fac522d2301b78dab16234b291/src/module/EMPairProduction.cpp
+    forward_approx: True
+
+    # If True, simulation includes EMDoublePairProduction and EMTripletPairProduction with the background fields (set by `include_CMB` and `include_EBL`)
+    include_higher_order_pp: True
+
+    # If True, simulations includes synchrotron radiation interactions / energy losses etc
+    include_sync: True
+
+    # "Updates (??) redshift and applies adiabatic energy loss according to the traveled distance.""
+    # https://crpropa.github.io/CRPropa3/api/classcrpropa_1_1FutureRedshift.html#class-futureredshift
+    include_z_evol: True
+
+    # Thinning = 0 tracks all particles
+    thinning: 0.
+
+    CandidateTagColumn : True
+
+    # Below are not in use by me, and set to None to confirm.
+    cpu_n: None  # Does nothing seemingly. Set this in slurm script?
+    multiplicity: 1  # Number of times `Nbatch` particles are simulated. Does nothing in my configurations. I think this is used if there is a list of magnetic fields (`B` keys)
+    emcasc: None  # Used if the injected spectrum is a CR (not photon) spectrum. If injecting a photon spectrum, the EM cascade is setup in a separate function.
+
+
+Source:
+    # Source redshift. 
+    # The comoving distance D is calculated with this redshift.
+    # D is used as the radius of the large observer sphere. 
+    z: 0.4
+
+    # Source shape / crpropaclass
+    # Options: 
+    #   - 'cone' (crpropa.SourceEmissionCone), 
+    #   - 'iso' (crpropa.SourceIsotropicEmission), 
+    #   - 'dir' (crpropa.SourceDirection).
+    # If the direction of the source emission (if using `source_morphology=cone` or `source_morphology=dir`) is set by x=cos(`obsAngle`), y=sin(`obsAngle`), z=0.
+    # The source is placed at (`obsPosX`, `obsPosY`, `obsPosZ`).
+    source_morphology: cone
+
+    # If `source_morphology=cone` this is the jet opening angle (in degrees). If `source_morphology!=cone` this is not used in setting up the source.
+    # NOTE THIS IS ALSO IN `Observer` SECTION, but only this one appears to be used.
+    th_jet: 0.1
+
+    # If True, injects/simulates a *powerlaw* spectrum with `index` frrom `Emin` to `Emax`. If False, injects delta function with energy `Energy`
+    useSpectrum: True 
+
+    # Minimum energy (in eV) of injected particles. Used if `useSpectrum=True`.
+    # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    Emin: 1.e+8  # 100 MeV (Fermi-LAT lower energy range)
+
+    # Maximum energy (in eV) of injected particles. Used if `useSpectrum=True`.
+    # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    Emax: 20.e+12 
+
+    # Index of powerlaw for injected particles. Used if `useSpectrum=True`. 
+    index: -1.5 
+
+     # Particle ID for injected particles. 22 is photons. 
+     # Other PIDs: https://crpropa.github.io/CRPropa3/pages/Basic-concepts.html#particle-id.
+    Composition: 22  # Photons 
+
+    # Below are not in use by me, and set to None to confirm.
+    Energy: None  # Energy of single particle (in eV), for mono-energetic injections. Used if `useSpectrum=False`.
+    Esteps: None  # TODO. Used if `useSpectrum=False`? Not used when running `run_crpropa_em_cascade.py` with settings in this config.
+    Spectrum: None  # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. "E^{0[index]:.3f}*exp(-E/({0[cutoff]:.2f} * TeV))"
+    cutoff: None # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. Cutoff energy in TeV
+
+
+Observer:
+    # The source is placed at (`obsPosX`, `obsPosY`, `obsPosZ`).
+    # The origin of the observer large sphere is at (`obsPosX`, `obsPosY`, `obsPosZ`).
+    obsPosX: 0. 
+    obsPosY: 0.
+    obsPosZ: 0. 
+
+    # The direction of the source emission (if using `source_morphology=cone` or `source_morphology: dir`) is set by x=cos(`obsAngle`), y=sin(`obsAngle`), z=0.
+    obsAngle: 0.
+
+    # Minimum redshift for detection ~ 14 Mpc
+    # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    zmin: 1.e-3
+
+    # Large sphere observer framework: observer is a spherical surface with radius equal to comoving distance of source at redshift `z`.
+    # MUST be True; small sphere observer not available in CRPropa 3.2
+    obsLargeSphere: True 
+
+    # If True, also observes electrons by adding another observer (same setup/spherical-surface as photon observer).
+    # The electron observer vetos photons.
+    # If False, only photons are observed, and the photon observer vetos electrons.
+    obsElectrons: False
+
+    # Does not appear to be used. Instead, `th_jet` from `Source` is used.
+    th_jet: None 
+
+
+BreakConditions:
+    # Maximum distance of particle for tracing/tracking.
+    # Set by: `Dmax` * 1,000 Mpc
+    # Suggested value within `_setup_break` is 1.5 * comoving distance
+    # Redshift 0.1 has comoving distance 413.4886360184282 Mpc for cosmology h=0.71, Om=0.27 -> 620.2329540276423 Mpc
+    # Redshift 0.4 has comoving distance 1542.965551541961 Mpc for cosmology h=0.71, Om=0.27 -> 2314.4483273129415 Mpc
+    # Redshift 0.7 has comoving distance 2505.305512656977 Mpc for cosmology h=0.71, Om=0.27 -> 3757.9582689854655 Mpc
+    # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    Dmax: 2314.0
+
+    # Particles below `Emin` (in eV) are no longer traced
+    # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    Emin: 1.e+8 
+
+    # Minimum rigidity in gigavolts
+    minRigidity: 50.0
+
+
+Bfield:
+    # Type of magnetic field
+    # Options:
+    #   - cell (fixed magnitude `B` with random unit vector direction in each grid cell)
+    #   - turbulence (turbulent field...)
+    #   - txt (magnetic field values specific by a text file `fnTxt` and grid by `....`)
+    type: geo
+
+    b_void: 0.0
+
+    # Only read if `type=geo`
+    geo:
+        # Fixed amplitude (in Gauss) for B field
+        # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+        B: 1.e-13
+        # Side length of each side of each grid cell (in Mpc)
+        # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
+        # Must be a float?
+        gridSpacing: 50.0
+        # Seed for random direction of B field
+        seed: 2541004132
+        # Description which will be used in output directory name
+        # In addition, this MUST have a matching key and function in sim_crpropa.py
+        # Options:
+        #   - outer_sphere TODO
+        #       Outer spherical shell (near observer) has B=/=0, and inner shell (near source) has B=0
+        #   - inner_sphere TODO
+        #       Inner spherical shell has B=/=0, and outer shell has B=0
+        #   - outer_rectangular_prism
+        #       Outer rectangular prism (near observer) has B=/=0, and inner (near source) has B=0
+        #   - inner_rectangular_prism
+        #       Inner rectangular prism (near observer) has B=/=0, and outer (near source) has B=0
+        descriptor: inner_rectangular_prism
+        reflective: True
+
+    # CRPropa EBL class/model to use
+    EBL: IRB_Saldana21
