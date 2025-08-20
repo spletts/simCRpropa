@@ -80,7 +80,7 @@ def init_rectangular_prism_bfield(field_zero_near_origin, vgrid, obsSize,
     msg = f"Using random seed={seed}"
     logging.info(msg)
     print(msg)
-    np.random.seed(seed)
+    prng = RandomState(seed)
     gridArray = vgrid.getGrid()
     nx = vgrid.getNx()
     ny = vgrid.getNy()
@@ -94,9 +94,9 @@ def init_rectangular_prism_bfield(field_zero_near_origin, vgrid, obsSize,
         for yi in range(0, ny):
             for zi in range(0, nz):
                 vect3d = vgrid.get(xi, yi, zi)
-                x = np.random.uniform(-1,1)
-                y = np.random.uniform(-1,1)
-                z = np.random.uniform(-1,1)
+                x = prng.uniform(-1,1)
+                y = prng.uniform(-1,1)
+                z = prng.uniform(-1,1)
                 d = np.sqrt(x*x+y*y+z*z)
 
                 if field_zero_near_origin:
