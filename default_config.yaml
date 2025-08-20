@@ -31,7 +31,7 @@ Simulation:
     minStepLength: 0.3  # pc; paper says "set the minimum step length of the simulation such that time delays t down to 1 yr can be resolved" x=ct
 
     # Maximum step length (in *Mpc*). Used in solver for equations of motion for a charged particle in a magnetic field.
-    maxStepLength: 50.0
+    maxStepLength: 1.0
 
     # If True, simulations includes CMB as a background field to modules/interactions
     include_CMB: True
@@ -177,7 +177,7 @@ Bfield:
         # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
         gridSpacing: 50.0
         # Seed for random direction of B field
-        seed: 2308 
+        seed: 2541004132 
 
      # Only read if `type=geo`
     geo:
@@ -189,7 +189,7 @@ Bfield:
         # Must be a float?
         gridSpacing: 50.0
         # Seed for random direction of B field
-        seed: 2308 
+        seed: 2541004132 
         # Description which will be used in output directory name
         # In addition, this MUST have a matching key and function in sim_crpropa.py
         # Options:
@@ -212,7 +212,7 @@ Bfield:
         NBgrid:
         maxTurbScale: 50. # maximum turbulence scale in Mpc
         turbIndex: -3.667 # turbulence index, default - 11/3
-        seed: 2308 
+        seed:  
 
     # CRPropa EBL class/model to use
     EBL: IRB_Saldana21

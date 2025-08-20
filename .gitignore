@@ -1,3 +1,13 @@
+*out
+*png
+configs/
+output/
+simCRpropa/btxt/
+simCRpropa/scripts/tmp/
+slurm_sim_scripts/
+tmp/
+
+
 # Byte-compiled / optimized / DLL files
 tests/__pycache__/
 __pycache__/
