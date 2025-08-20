@@ -18,6 +18,8 @@ from simCRpropa import collect
 from collections import OrderedDict
 import h5py
 import os
+from numpy.random import RandomState
+
 
 @lsf.setLsf
 def _submit_run_lsf(script, config, option, njobs, **kwargs):
@@ -140,7 +142,7 @@ def initRandomField(vgrid, Bamplitude, seed=0):
     msg = f"Using random seed={seed}"
     logging.info(msg)
     print(msg)
-    np.random.seed(seed)
+    prng = RandomState(seed)
     gridArray = vgrid.getGrid()
     nx = vgrid.getNx()
     ny = vgrid.getNy()
@@ -150,20 +152,18 @@ def initRandomField(vgrid, Bamplitude, seed=0):
         for yi in range(0,ny):
             for zi in range(0,nz):
                 vect3d = vgrid.get(xi,yi,zi)
-
-                x = np.random.uniform(-1,1)
-                y = np.random.uniform(-1,1)
-                z = np.random.uniform(-1,1)
+                x = prng.uniform(-1,1)
+                y = prng.uniform(-1,1)
+                z = prng.uniform(-1,1)
                 d = np.sqrt(x*x+y*y+z*z)
-                #while d > 1:  
-                #    x = np.random.uniform(-1,1)
-                #    y = np.random.uniform(-1,1)
-                #    z = np.random.uniform(-1,1)
-                #    d = np.sqrt(x*x+y*y+z*z)
 
                 vect3d.x = Bamplitude * x/d
                 vect3d.y = Bamplitude * y/d
                 vect3d.z = Bamplitude * z/d
+    # Print last random number/vector to see if it is thread-safe
+    logging.info(f"Last x-component random unit vector in grid: ({x})")
+    logging.info(f"Last random unit vector in grid: ({x, y ,z})")
+
     return None
 
 def build_histogram(combined, config, cascparent = 11., intparent = 22., obs = 22.):
@@ -790,7 +790,6 @@ class SimCRPropa(object):
 
         # Interactions involving CMB
         if self.Simulation['include_CMB']:
-            # True means secondaries are included
             self.m.add(EMInverseComptonScattering(CMB(), True, thinning))
             # EMPairProduction:  electron-pair production of cosmic ray photons 
             # with background photons: gamma + gamma_b -> e+ + e- (Breit-Wheeler process).
