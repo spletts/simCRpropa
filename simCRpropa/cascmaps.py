@@ -25,7 +25,7 @@ else:
     from gammapy.maps import scale_cube
 
 
-def stack_results_lso(infile, outfile, **kwargs):
+def stack_results_lso(infile, outfile, use_small_angle_approx, esteps=40, **kwargs):
     """
     Stack the results of bin-by-bin simulations
     for simulations with a large sphere observer
@@ -69,7 +69,7 @@ def stack_results_lso(infile, outfile, **kwargs):
     kwargs.setdefault('dgrp', 'simEM')
     kwargs.setdefault('entries', ['E0', 'E', 'D', 'X', 'Px', 'P0x', 'ID', 'ID1', 'W'])
     kwargs.setdefault('entries_stack', ['X', 'Px', 'P0x'])
-    kwargs.setdefault('entries_save', ['E0', 'E', 'dt', 'Protsph', 'ID', 'ID1', 'W'])
+    kwargs.setdefault('entries_save', ['E0', 'E', 'dt', 'Protsph', 'ID', 'ID1', 'W', 'P0rotsph'])
     kwargs.setdefault('use_cosmo', True)
     kwargs.setdefault('Dsource', 0.)
 
@@ -89,7 +89,8 @@ def stack_results_lso(infile, outfile, **kwargs):
     logging.info("Combining data from all energy bins ...")
 
     if isinstance(config['Source']['Emin'], float):
-        n_ebins = config['Source']['Esteps']-1
+        # n_ebins = config['Source']['Esteps']-1
+        n_ebins = esteps - 1
     else:
         n_ebins = len(config['Source']['Emin'])
 
@@ -123,13 +124,15 @@ def stack_results_lso(infile, outfile, **kwargs):
     combined.close()
     logging.info("Done.")
 
-    mask = parallel_transport(data, jet_opening_angle=kwargs['theta_jet'],
-                              observing_angle=kwargs['theta_obs'])
+    # `data` is modified in place in this function
+    mask, cosangle_pinj, p0new, cosangle_pobs, P0rotsph = parallel_transport(data, jet_opening_angle=kwargs['theta_jet'],
+                              observing_angle=kwargs['theta_obs'], use_small_angle_approx=use_small_angle_approx)
 
     time_delay(config, data, use_cosmo=kwargs['use_cosmo'],
                Dsource=kwargs['Dsource'])
 
     # save to an hdf5 file
+    print("Saving {0} to {1:s}...".format(kwargs['entries_save'], outfile))
     logging.info("Saving {0} to {1:s}...".format(kwargs['entries_save'], outfile))
     for k in kwargs['entries_save']:
         if k in grp.keys():  # overwrite group if already exists
@@ -139,7 +142,7 @@ def stack_results_lso(infile, outfile, **kwargs):
         else:
             dtype = 'f8'
 
-        if k == 'Protsph':
+        if k == 'Protsph' or k == 'P0rotsph':
             grp.create_dataset(k, dtype = dtype,
                                data = data[k][:,mask], compression="gzip")
         else:
@@ -148,7 +151,7 @@ def stack_results_lso(infile, outfile, **kwargs):
     h.close()
     logging.info("Done.")
 
-    return data, config
+    return data, config, cosangle_pinj, p0new, mask, cosangle_pobs, P0rotsph
 
 
 def time_delay(config, data, use_cosmo=False, Dsource=0.):
@@ -189,7 +192,7 @@ def time_delay(config, data, use_cosmo=False, Dsource=0.):
     data['dt'] *= (u.Mpc.to('m') * u.m / c.c).to('yr').value
 
 
-def parallel_transport(data, jet_opening_angle, observing_angle=0):
+def parallel_transport(data, jet_opening_angle, observing_angle=0, use_small_angle_approx=True):
     """
     Compute parallel transport along sphere and mask for rejecting photons
 
@@ -217,6 +220,18 @@ def parallel_transport(data, jet_opening_angle, observing_angle=0):
     pnewsph = rot.car2sph(-pnew)
     # project initial momentum vector into observer's coordinate system
     p0new = rot.project2observer(data['P0x'], xx0norm, axis=0)
+    p0newsph = rot.car2sph(-p0new)
+
+    # Angle between observed momentum 
+    _cosangle_p = rot.projectjetaxis_helper(rot.project2observer(data['Px'], xx0norm, axis=0),
+                                    jet_theta_angle=observing_angle,
+                                    jet_phi_angle=0.,
+                                    print_check=False)
+
+    cosangle = rot.projectjetaxis_helper(p0new,
+                                    jet_theta_angle=observing_angle,
+                                    jet_phi_angle=0.,
+                                    print_check=False)
     # Calculate the mask for initial momentum
     # vectors given jet observation and opening angle
     mask = rot.projectjetaxis(p0new,
@@ -224,14 +239,43 @@ def parallel_transport(data, jet_opening_angle, observing_angle=0):
                               jet_theta_angle=observing_angle,
                               jet_phi_angle=0.)
     data['mask'] = mask
-    data['Protsph'] = np.vstack([pnewsph[0, :],
-                                 # Probing intergalactic magnetic fields with simulations of electromagnetic cascades
-                                 # Fig 2
-                                 np.rad2deg(pnewsph[2, :] * np.sin(pnewsph[1, :])),
-                                 np.rad2deg(pnewsph[2, :] * np.cos(pnewsph[1, :])) + 90.
-                                 ])
+
+    if use_small_angle_approx:
+        print("Using small angle approximation")
+        # Observed
+        Protsph = np.vstack([pnewsph[0, :],
+                                    # Probing intergalactic magnetic fields with simulations of electromagnetic cascades
+                                    # Fig 2
+                                    np.rad2deg(pnewsph[2, :] * np.sin(pnewsph[1, :])),
+                                    np.rad2deg(pnewsph[2, :] * np.cos(pnewsph[1, :])) + 90.
+                                    ])
+        # Injected
+        P0rotsph = np.vstack([p0newsph[0, :],
+                                    # Probing intergalactic magnetic fields with simulations of electromagnetic cascades
+                                    # Fig 2
+                                    np.rad2deg(p0newsph[2, :] * np.sin(p0newsph[1, :])),
+                                    np.rad2deg(p0newsph[2, :] * np.cos(p0newsph[1, :])) + 90.
+                                    ])
+    else:
+        print("Not using small angle approximation")
+        Protsph = np.vstack([pnewsph[0, :],
+                                    # Probing intergalactic magnetic fields with simulations of electromagnetic cascades
+                                    # Fig 2
+                                    np.rad2deg(np.sin(pnewsph[2, :]) * np.sin(pnewsph[1, :])),
+                                    np.rad2deg(np.sin(pnewsph[2, :]) * np.cos(pnewsph[1, :])) + 90.
+                                    ])
+        P0rotsph = np.vstack([p0newsph[0, :],
+                                    # Probing intergalactic magnetic fields with simulations of electromagnetic cascades
+                                    # Fig 2
+                                    np.rad2deg(np.sin(p0newsph[2, :]) * np.sin(p0newsph[1, :])),
+                                    np.rad2deg(np.sin(p0newsph[2, :]) * np.cos(p0newsph[1, :])) + 90.
+                                    ])                      
+    data['Protsph'] = Protsph
+    data['P0rotsph'] = P0rotsph
+
     logging.info("Done.")
-    return mask
+    # return mask
+    return mask, cosangle, p0new, _cosangle_p, P0rotsph
 
 
 class HistPrimary(object):
@@ -723,9 +767,12 @@ class CascMap(object):
             else:
                 energy_injected = np.append(config['Source']['Emin'],
                                         config['Source']['Emax'][-1])
+            # This executes if i=0
             if not i:
                 edges['energy_injected'] = energy_injected
+                # TODO is this energy injected in this bin?
                 n_injected_particles = data['intspec/weights'][()]
+            # Executes if i != 0
             else:
                 # check if true energy edges overlap, not allowed
                 # otherwise append / prepend
