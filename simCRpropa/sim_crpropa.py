@@ -77,9 +77,7 @@ def init_rectangular_prism_bfield(field_zero_near_origin, vgrid, obsSize,
     Returns
     -------
     """
-    msg = f"Using random seed={seed}"
-    logging.info(msg)
-    print(msg)
+    logging.info(f"Using random seed={seed}")
     prng = RandomState(seed)
     gridArray = vgrid.getGrid()
     nx = vgrid.getNx()
@@ -129,19 +127,14 @@ def init_rectangular_prism_bfield(field_zero_near_origin, vgrid, obsSize,
   
 
 def initPixelizedSphere(seed):
-    # TODO
-    msg = f"Using random seed={seed}"
-    logging.info(msg)
-    print(msg)
+    logging.info(f"Using random seed={seed}")
     np.random.seed(seed)
     
     return None
 
 
 def initRandomField(vgrid, Bamplitude, seed=0):
-    msg = f"Using random seed={seed}"
-    logging.info(msg)
-    print(msg)
+    logging.info(f"Using random seed={seed}")
     prng = RandomState(seed)
     gridArray = vgrid.getGrid()
     nx = vgrid.getNx()
@@ -457,7 +450,7 @@ class SimCRPropa(object):
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'], 
                                                           solver_dict[solver], 'Bgeo', f"{self.Bfield['geo']['descriptor']}_filled", 
                                                           f"bvoid{self.Bfield['b_void']}_bext{self.Bfield['geo']['B']}", 
-                                                          f"maxStep{self.Simulation['maxStepLength']}"))
+                                                          f"scale{self.Bfield['gridSpacing']:.2f}", f"maxStep{self.Simulation['maxStepLength']}"))
         elif self.Bfield['type'] == 'txt':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'], 
                                                           solver_dict[solver], 'Btxt', self.Bfield['txt']['fnDescriptor'], f"maxStep{self.Simulation['maxStepLength']}"))
@@ -501,6 +494,7 @@ class SimCRPropa(object):
             # Number of grid cells to reach the observer sphere from the source
             # redshift2ComovingDistance returns a number in meters; convert to Mpc by diving by Mpc
             gridSize = int(np.ceil(redshift2ComovingDistance(self.Source['z']) / Mpc / gridSpacingMpcImplicit ))
+            obsSize = gridSize
             # floating point 3D vector grid 
             vgrid = Grid3f(gridOrigin,
                            gridSize,
@@ -595,7 +589,7 @@ class SimCRPropa(object):
             pass
         logging.info(f'B(10 Mpc, 0, 0)={self.bField.getField(Vector3d(10,0,0) * Mpc) / nG} nG')
         logging.info(f'vgrid extension: {self.__extentMeters/Mpc} Mpc')
-        return
+        return self.bField, vgrid, gridSpacingMpcImplicit, self.__extentMeters, obsSize, gridSize
 
 
     def _create_electron_positron_observer(self):
@@ -713,6 +707,8 @@ class SimCRPropa(object):
     def _create_source(self):
         """Set up the source for the simulation"""
         self.source = Source()
+        # Tag primaries as P
+        self.source.add(SourceTag("1"))
         self.source.add(SourceRedshift(self.Source['z']))
         if self.Observer['obsLargeSphere']:
             obsPosition = Vector3d(self.Observer['obsPosX'],self.Observer['obsPosY'],self.Observer['obsPosZ'])
@@ -756,6 +752,8 @@ class SimCRPropa(object):
         # mono-energetic particle:
             self.source.add(SourceEnergy(self.Source['Energy'] * eV))
         self.source.add(SourceParticleType(self.Source['Composition']))
+
+
         logging.info('source initialized')
         return
 
@@ -790,156 +788,56 @@ class SimCRPropa(object):
 
         # Interactions involving CMB
         if self.Simulation['include_CMB']:
-            self.m.add(EMInverseComptonScattering(CMB(), True, thinning))
+            # True means secondaries are included
             # EMPairProduction:  electron-pair production of cosmic ray photons 
             # with background photons: gamma + gamma_b -> e+ + e- (Breit-Wheeler process).
-            self.m.add(EMPairProduction(CMB(), True, thinning))
+            # Set tag BEFORE adding module
+            emic_cmb = EMInverseComptonScattering(CMB(), True, thinning)
+            emic_cmb.setInteractionTag("0")
+            empp_cmb = EMPairProduction(CMB(), True, thinning)
+            empp_cmb.setInteractionTag("0")
+            self.m.add(emic_cmb)
+            self.m.add(empp_cmb)
             if self.Simulation['include_higher_order_pp']:
-                self.m.add(EMDoublePairProduction(CMB(), True, thinning))
-                self.m.add(EMTripletPairProduction(CMB(), True, thinning))
-
+                emdpp_cmb = EMDoublePairProduction(CMB(), True, thinning)
+                emdpp_cmb.setInteractionTag("0")
+                emtpp_cmb = EMTripletPairProduction(CMB(), True, thinning)
+                emtpp_cmb.setInteractionTag("0")
+                self.m.add(emdpp_cmb)
+                self.m.add(emtpp_cmb)
         if self.Simulation['include_EBL']:
-            self.m.add(EMInverseComptonScattering(self._EBL(), True, thinning))
+            emic_ebl = EMInverseComptonScattering(self._EBL(), True, thinning)
+            emic_ebl.setInteractionTag("0")
+            self.m.add(emic_ebl)
             try:
                 # CRpropa version with 
                 # possibility to deactivate small angle approximation
-                self.m.add(EMPairProduction(self._EBL(), True, thinning, self.Simulation['forward_approx']))
+                empp_ebl = EMPairProduction(self._EBL(), True, thinning, self.Simulation['forward_approx'])
+                empp_ebl.setInteractionTag("0")
+                self.m.add(empp_ebl)
                 logging.info(f"Using forward approx: {self.Simulation.get('forward_approx', True)} (if this is false, simulation will be slower!)")
             except:
-                self.m.add(EMPairProduction(self._EBL(), True, thinning))
+                empp_ebl = EMPairProduction(self._EBL(), True, thinning)
+                empp_ebl.setInteractionTag("0")
+                self.m.add(empp_ebl)
 
             if self.Simulation['include_higher_order_pp']:
-                self.m.add(EMDoublePairProduction(self._EBL(), True, thinning))
-                self.m.add(EMTripletPairProduction(self._EBL(), True, thinning))
-
+                emdpp_ebl = EMDoublePairProduction(self._EBL(), True, thinning)
+                emdpp_ebl.setInteractionTag("0")
+                emtpp_ebl = EMTripletPairProduction(self._EBL(), True, thinning)
+                emtpp_ebl.setInteractionTag("0")
+                self.m.add(emdpp_ebl)
+                self.m.add(emtpp_ebl)
         # Synchrotron radiation: 
         #SynchrotronRadiation (ref_ptr< MagneticField > field, bool havePhotons=false, double limit=0.1) or 
         #SynchrotronRadiation (double Brms=0, bool havePhotons=false, double limit=0.1) ; 
         #Large number of particles can cause memory problems!
         if self.Simulation['include_sync']:
-            self.m.add(SynchrotronRadiation(self.bField, True, thinning))
+            sync = SynchrotronRadiation(self.bField, True, thinning)
+            sync.setInteractionTag("0")
+            self.m.add(sync)
         logging.info('modules initialized')
         return
-
-    # def _setup_crcascade(self):
-    #     """
-    #     Setup simulation module for cascade initiated by cosmic rays
-        
-    #     kwargs 
-    #     ------
-    #     """
-    #     if self.emcasc:
-    #         photons = True
-    #         electrons = True
-    #         neutrinos = False
-    #     else:
-    #         photons = False
-    #         electrons = False
-    #         neutrinos = True
-    #     antinucleons = False if self.Source['Composition'] == 2212 else True
-    #     limit = self.Simulation.get('thinning', 0.1)
-    #     logging.info("Set limit (= fraction of the mean free path, to which the propagation step will be limited)" +\
-    #                  f" for PhotoPionProduction to {limit}")
-    #     if limit < 0.5:
-    #         logging.warning("for high energies, set limit to >= 0.5 to avoid memory problems")
-
-    #     self.m = ModuleList()
-    #     #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4,
-    #     #double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
-    #     #self.m.add(PropagationCK(self.bField, 1e-2, 100 * kpc, 10 * Mpc))
-    #     #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
-    #     if self.Source['Energy'] >= 1e18 and self.emcasc:
-    #         logging.info("Energy is greater than 1 EeV, limiting " \
-    #                     f"sensitivity due to memory. E = {self.Source['Energy']}")
-    #         #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
-    #         tol = np.max([1e-4, self.Simulation['tol']])
-    #     else:
-    #         tol = self.Simulation['tol']
-    #         # this takes about a factor of five longer:
-    #         #self.m.add(PropagationCK(self.bField, 1e-9, 1 * pc, 10 * Mpc))
-    #         # than this:
-    #         #self.m.add(PropagationCK(self.bField, 1e-6, 1 * kpc, 10 * Mpc))
-
-    #     if self.Simulation.get('propagation', 'CK') == 'CK':
-    #         #PropagationCK (ref_ptr< MagneticField > field=NULL, double tolerance=1e-4, double minStep=(0.1 *kpc), double maxStep=(1 *Gpc))
-    #         logging.info("Using CK propagation module")
-    #         self.m.add(PropagationCK(self.bField, tol,
-    #                                  self.Simulation['minStepLength'] * pc,
-    #                                  self.Simulation['maxStepLength'] * Mpc))
-
-    #     elif self.Simulation.get('propagation', 'CK') == 'BP':
-    #         # PropagationBP(ref_ptr<Ma.gneticField> field, double tolerance, double minStep, double maxStep)
-    #         logging.info("Using BP propagation module")
-    #         self.m.add(PropagationBP(self.bField, tol,
-    #                                  self.Simulation['minStepLength'] * pc,
-    #                                  self.Simulation['maxStepLength'] * Mpc))
-    #     else:
-    #         raise ValueError("unknown propagation module chosen")
-
-    #     thinning = self.Simulation.get('thinning', 0.)
-    #     logging.info(f"Using thinning {thinning}")
-    #     if thinning <= 0.1:
-    #         logging.warning("for high energies, you might want to choose higher thinning values (close to 1.)")
-    #     # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
-    #     #m.add(Redshift())
-    #     # Updates redshift and applies adiabatic energy loss according to the traveled distance. 
-    #     # Extends to negative redshift values to allow for symmetric time windows around z=0
-    #     self.m.add(FutureRedshift())
-    #     if self.emcasc:
-    #         #self.m.add(EMInverseComptonScattering(CMB, photons, limit)) # not activated in example notebook
-    #         #self.m.add(EMInverseComptonScattering(self._EBL(), photons, limit)) # not activated in example notebook
-    #         # EMPairProduction:  electron-pair production of cosmic ray photons 
-    #         #with background photons: gamma + gamma_b -> e+ + e- (Breit-Wheeler process).
-    #         # EMPairProduction(PhotonField photonField = CMB, bool haveElectrons = false,double limit = 0.1 ), 
-    #         #if haveElectrons = true, electron positron pair is created
-    #         # EMInverComptonScattering(PhotonField photonField = CMB,bool havePhotons = false,double limit = 0.1 ), 
-    #         #if havePhotons = True, photons are created
-    #         # also availableL EMDoublePairProduction, EMTripletPairProduction
-    #         #self.m.add(EMPairProduction(self._EBL(), electrons, limit)) # not activated in example notebook
-
-    #         #self.m.add(EMPairProduction(CMB(), electrons, limit)) # not activated in example notebook
-
-    #         self.m.add(EMInverseComptonScattering(CMB(), photons, thinning))
-    #         self.m.add(EMInverseComptonScattering(self._URB(), photons, thinning))
-    #         self.m.add(EMInverseComptonScattering(self._EBL(), photons, thinning))
-
-    #         self.m.add(EMPairProduction(CMB(), electrons, thinning))
-    #         self.m.add(EMPairProduction(self._URB(), electrons, thinning))
-    #         self.m.add(EMPairProduction(self._EBL(), electrons, thinning))
-    #         self.m.add(EMDoublePairProduction(CMB(), electrons, thinning))
-
-    #         self.m.add(EMDoublePairProduction(self._URB(), electrons, thinning))
-    #         self.m.add(EMDoublePairProduction(self._EBL(), electrons, thinning))
-
-    #         self.m.add(EMTripletPairProduction(CMB(), electrons, thinning))
-    #         self.m.add(EMTripletPairProduction(self._URB(), electrons, thinning))
-    #         self.m.add(EMTripletPairProduction(self._EBL(), electrons, thinning))
-
-    #     # for photo-pion production: 
-    #     # PhotoPionProduction (PhotonField photonField=CMB, bool photons=false, bool neutrinos=false, 
-    #     # bool electrons=false, bool antiNucleons=false, double limit=0.1, bool haveRedshiftDependence=false)
-    #     self.m.add(PhotoPionProduction(CMB(), photons, neutrinos, electrons, antinucleons, limit, True))
-    #     self.m.add(PhotoPionProduction(self._EBL(), photons, neutrinos, electrons, antinucleons, limit, True))
-
-    #     # ElectronPairProduction (PhotonField photonField=CMB, bool haveElectrons=false, double limit=0.1)
-    #     # Electron-pair production of charged nuclei with background photons. 
-    #     self.m.add(ElectronPairProduction(CMB(), electrons, limit))
-    #     self.m.add(ElectronPairProduction(self._EBL(), electrons, limit))
-    #     if not self.Source['Composition'] == 2212: # protons don't decay or diseintegrate
-    #         # for nuclear decay:
-    #         #NuclearDecay (bool electrons=false, bool photons=false, bool neutrinos=false, double limit=0.1)
-    #         self.m.add(NuclearDecay(electrons, photons, neutrinos))
-    #         # for photo disentigration:
-    #         #PhotoDisintegration (PhotonField photonField=CMB, bool havePhotons=false, double limit=0.1)
-    #         self.m.add(PhotoDisintegration(CMB(), photons))
-    #         self.m.add(PhotoDisintegration(self._EBL(), photons))
-    #     # Synchrotron radiation: 
-    #     #SynchrotronRadiation (ref_ptr< MagneticField > field, bool havePhotons=false, double limit=0.1) or 
-    #     #SynchrotronRadiation (double Brms=0, bool havePhotons=false, double limit=0.1) ; 
-    #     #Large number of particles can cause memory problems!
-    #     #self.m.add(SynchrotronRadiation(self.bField, photons)) # not in example notebook
-    #     logging.info('modules initialized')
-    #     return
 
     def _setup_break(self):
         """Setup breaking conditions"""

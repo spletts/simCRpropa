@@ -290,17 +290,22 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
             if n.find('ID') >= 0:
                 dtype = 'i8'
             elif n == 'tag':
-                dtype = 'S4' 
-                dtype = h5py.string_dtype(encoding='utf-8')
-                logging.info(f"Using string type for {n}")
-                print(f"Using string type for {n}")
+                dtype = 'i8'
+                # dtype = 'S4' 
+                # dtype = h5py.string_dtype(encoding='utf-8')
+                # logging.info(f"Using string type for {n}")
+                # print(f"Using string type for {n}")
             else:
-                dtype ='f8'
+                # Try f16 instead of f8 to get more precise positions
+                # dtype = 'f16' # 'f8'
+                dtype = 'f8'
         else:
             if n.find('ID') >= 0:
                 dtype = 'i8'
             else:
-                dtype ='f8'
+                # Try f16 instead of f8 to get more precise positions
+                # dtype = 'f16' # 'f8'
+                dtype = 'f8'
 
         if not useSpectrum:
             if isinstance(config['Source']['Emin'], float):
@@ -413,7 +418,8 @@ def readCRPropaOutput(filename, tag_column=True, use_np=False):
         if 'ID' in name:
             formats.append('I')  # Integer
         elif name == 'tag':
-            formats.append(h5py.string_dtype(encoding='utf-8'))  # String
+            formats.append('I')  # Integer
+            # formats.append(h5py.string_dtype(encoding='utf-8'))  # String
         else:
             formats.append('D')  # Double
             
