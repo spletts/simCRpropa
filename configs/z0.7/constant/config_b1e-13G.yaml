@@ -69,7 +69,7 @@ Source:
     # Source redshift. 
     # The comoving distance D is calculated with this redshift.
     # D is used as the radius of the large observer sphere. 
-    z: 0.4
+    z: 0.7
 
     # Source shape / crpropaclass
     # Options: 
@@ -144,7 +144,7 @@ BreakConditions:
     # Redshift 0.4 has comoving distance 1542.965551541961 Mpc for cosmology h=0.71, Om=0.27 -> 2314.4483273129415 Mpc
     # Redshift 0.7 has comoving distance 2505.305512656977 Mpc for cosmology h=0.71, Om=0.27 -> 3757.9582689854655 Mpc
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-    Dmax: 2314.0
+    Dmax: 3758.0
 
     # Particles below `Emin` (in eV) are no longer traced
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3

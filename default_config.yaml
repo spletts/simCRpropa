@@ -50,7 +50,7 @@ Simulation:
     # If True, simulations includes synchrotron radiation interactions / energy losses etc
     include_sync: True
 
-    # "Updates (??) redshift and applies adiabatic energy loss according to the traveled distance.""
+    # "Updates redshift and applies adiabatic energy loss according to the traveled distance.""
     # https://crpropa.github.io/CRPropa3/api/classcrpropa_1_1FutureRedshift.html#class-futureredshift
     include_z_evol: True
 

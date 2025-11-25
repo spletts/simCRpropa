@@ -168,7 +168,7 @@ Bfield:
     cell:
         # Fixed amplitude (in Gauss) for B field
         # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-        B: 1.e-13
+        B: 1.e-15
         # Side length of each side of each grid cell (in Mpc)
         # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
         # MUST be a float not int

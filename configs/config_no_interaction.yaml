@@ -174,34 +174,5 @@ Bfield:
         # Seed for random direction of B field
         seed: 0 
 
-     # Only read if `type=txt`
-    txt:
-        # Text file with no header which contains the magentic field values (in Gauss), each row foramtted as Bx By Bz
-        # with z changing the quickest (i.e. iterate over x, then y, THEN z when creating the file)
-        # If testing different fnTxt names, update `outdir` because the filename created in `sim_crpropa.py` is not unique; 
-        #  ('Btxt' is appended to the path)
-        # The origin of the grid is at 0, 0, 0
-        txtFile: /hb/home/mspletts/simCRpropa/simCRpropa/scripts/btxt_output/sphere/z0.1/b_outer_shell_filled_1e-13/btxt_gridsize9.txt
-        # This will be added to the output directory name.
-        # This is here in case there are multiple `txtFile` used so the results are not overwritten.
-        # e.g. 'cube', 'sphere'
-        fnDescriptor: outer_sphere
-        # Side length of each side of each grid cell (in Mpc)
-        # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
-        # MUST match the grid spacing implemented when creating `txtFile`. Beware if it doesn't NO ERRORS WILL BE THROWN.
-        gridSpacing: 50.
-        # If True, reflective boundary conditions applied.
-        # If False, periodic boundary conditions applied.
-        reflective: True
-       
-    # Only read if `type=turbulent`
-    turbulence:
-        B:
-        gridSpacing:
-        NBgrid:
-        maxTurbScale: 50. # maximum turbulence scale in Mpc
-        turbIndex: -3.667 # turbulence index, default - 11/3
-        seed: 0
-
     # CRPropa EBL class/model to use
     EBL: IRB_Saldana21

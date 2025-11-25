@@ -50,7 +50,7 @@ Simulation:
     # If True, simulations includes synchrotron radiation interactions / energy losses etc
     include_sync: True
 
-    # "Updates redshift and applies adiabatic energy loss according to the traveled distance.""
+    # "Updates (??) redshift and applies adiabatic energy loss according to the traveled distance.""
     # https://crpropa.github.io/CRPropa3/api/classcrpropa_1_1FutureRedshift.html#class-futureredshift
     include_z_evol: True
 
@@ -69,7 +69,7 @@ Source:
     # Source redshift. 
     # The comoving distance D is calculated with this redshift.
     # D is used as the radius of the large observer sphere. 
-    z: 0.4
+    z: 0.7
 
     # Source shape / crpropaclass
     # Options: 
@@ -144,7 +144,7 @@ BreakConditions:
     # Redshift 0.4 has comoving distance 1542.965551541961 Mpc for cosmology h=0.71, Om=0.27 -> 2314.4483273129415 Mpc
     # Redshift 0.7 has comoving distance 2505.305512656977 Mpc for cosmology h=0.71, Om=0.27 -> 3757.9582689854655 Mpc
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-    Dmax: 2314.0
+    Dmax: 3758.0
 
     # Particles below `Emin` (in eV) are no longer traced
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
@@ -160,21 +160,34 @@ Bfield:
     #   - cell (fixed magnitude `B` with random unit vector direction in each grid cell)
     #   - turbulence (turbulent field...)
     #   - txt (magnetic field values specific by a text file `fnTxt` and grid by `....`)
-    type: cell
+    type: geo
 
     b_void: 0.0
 
-    # Only read if `type=cell`
-    cell:
+    # Only read if `type=geo`
+    geo:
         # Fixed amplitude (in Gauss) for B field
         # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
         B: 1.e-13
         # Side length of each side of each grid cell (in Mpc)
         # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
-        # MUST be a float not int
-        gridSpacing: 50.
+        # Must be a float?
+        gridSpacing: 50.0
         # Seed for random direction of B field
         seed: 2541004132
+        # Description which will be used in output directory name
+        # In addition, this MUST have a matching key and function in sim_crpropa.py
+        # Options:
+        #   - outer_sphere TODO
+        #       Outer spherical shell (near observer) has B=/=0, and inner shell (near source) has B=0
+        #   - inner_sphere TODO
+        #       Inner spherical shell has B=/=0, and outer shell has B=0
+        #   - outer_rectangular_prism
+        #       Outer rectangular prism (near observer) has B=/=0, and inner (near source) has B=0
+        #   - inner_rectangular_prism
+        #       Inner rectangular prism (near observer) has B=/=0, and outer (near source) has B=0
+        descriptor: inner_rectangular_prism
+        reflective: True
 
     # CRPropa EBL class/model to use
     EBL: IRB_Saldana21

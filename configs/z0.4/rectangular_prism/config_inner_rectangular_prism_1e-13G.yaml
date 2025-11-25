@@ -31,7 +31,7 @@ Simulation:
     minStepLength: 0.3  # pc; paper says "set the minimum step length of the simulation such that time delays t down to 1 yr can be resolved" x=ct
 
     # Maximum step length (in *Mpc*). Used in solver for equations of motion for a charged particle in a magnetic field.
-    maxStepLength: 1.0
+    maxStepLength: 0.001
 
     # If True, simulations includes CMB as a background field to modules/interactions
     include_CMB: True
