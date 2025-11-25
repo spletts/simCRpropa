@@ -11,8 +11,8 @@ def car2sph(vec, axis = 0):
     return result
 
 
-def project2observer(vec, unitvec2obs, axis = 0):
-    """transforms vector to observer's coordinate system
+def project2observer_unit_vectors(unitvec2obs, axis = 0):
+    """helper function to: transforms vector to observer's coordinate system
 
     Parameter
     ---------
@@ -58,14 +58,47 @@ def project2observer(vec, unitvec2obs, axis = 0):
     e2 = np.vstack([cosphi * costheta, sinphi * costheta, -sintheta])
     e3 = -unitvec2obs
 
+    return e1, e2, e3
+
+
+def project2observer(vec, unitvec2obs, axis = 0):
+    """transforms vector to observer's coordinate system
+
+    Parameter
+    ---------
+    vec: `~numpy.ndarray`
+        Vector to be transformed, usually, this should be the momemtum vector
+        at the time of detection or momentum vector at origin.
+
+    unitvec2obs: `~numpy.ndarray`
+        Unit vector between point where event hit the sphere (observer's position)
+        and the point where event originated (the source).
+        In CRPropa notation, this would be (X - X0) / || X - X0 ||
+
+    {options}
+
+    axis: int
+        axis of vector components
+        default: 0
+
+    Returns
+    -------
+    `~numpy.ndarray` with vec projected onto new coordinate system
+    of observer, where z-axis points along (X - X0)
+    """
+
+    e1, e2, e3 = project2observer_unit_vectors(unitvec2obs, axis)
+
     result = np.vstack([np.sum(vec * e1, axis = 0),
                         np.sum(vec * e2, axis = 0),
                         np.sum(vec * e3, axis = 0)])
     return result
 
-def projectjetaxis(vec, jet_opening_angle = 5.,
+
+def projectjetaxis_helper(vec,
                     jet_theta_angle = 5.,
-                    jet_phi_angle = 90.):
+                    jet_phi_angle = 90.,
+                    print_check=False):
     """
     Project initial momentum vectors on jet axis
     and select only momentum vectors that fall within cone
@@ -97,9 +130,49 @@ def projectjetaxis(vec, jet_opening_angle = 5.,
     # angle between jet axis and initial momentum
     cosangle = np.sum(vecjet * -vec, axis = 0)
 
+    if print_check:
+        print("Observer frame results: (j_obs . p0_obs)")
+        for i in range(0, 3):
+                print(f"cos(angle)={cosangle[i]} -> alpha={np.rad2deg((np.arccos(cosangle[i])))} deg")
+
+    return cosangle
+
+
+def projectjetaxis(vec, jet_opening_angle = 5.,
+                    jet_theta_angle = 5.,
+                    jet_phi_angle = 90.,
+                    print_check=False):
+    """
+    Project initial momentum vectors on jet axis
+    and select only momentum vectors that fall within cone
+
+    Parameters
+    ----------
+    vec: `~numpy.ndarray`
+        Vector of initial momenta
+    jet_opening_angle: float
+        full jet opening angle (aperture) in degrees
+    jet_theta_angle: float
+        theta angle of jet axis, in degrees, 
+        this is the angle to the l.o.s. to the observer
+    jet_phi_angle: float
+        phi angle of jet axis, in degrees
+
+    Returns
+    -------
+    array with mask for initial momentum vectors
+    """
+
+    cosangle = projectjetaxis_helper(vec,
+                    jet_theta_angle,
+                    jet_phi_angle,
+                    print_check)
+
     # restrict to those photons inside cone
     # cos(alpha) >= cos(theta_jet / 2.) is equal to alpha <= theta_jet / 2.
+    
     return cosangle >= np.cos(np.radians(jet_opening_angle/2.))
+
 
 # DEPRECATED FUNCTIONS:
 
