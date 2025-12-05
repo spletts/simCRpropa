@@ -194,7 +194,7 @@ if __name__ == '__main__':
             if config['Observer']['obsElectrons']:
                 logging.info(f"Electron observer: {sim.electron_observer}")
 
-        if not sim.Source['useSpectrum']:
+        if sim.Source['usePowerLawSpectrum'] is False and sim.Source['muparserSpectrum'] is False:
             sim.Source['Energy'] = sim.EeV[i]
             logging.info(f"======= Bin {i + 1} / {sim.nbins}, Energy : {sim.EeV[i]} eV ========")
         logging.info(f"Running simulation for {sim.weights[i]} particle(s), saving output to {sim.photonoutputfile}")
@@ -227,7 +227,8 @@ if __name__ == '__main__':
     # For photons
     ph_outputfile = str(deepcopy(sim.photonoutputfile))
     ph_outdir = deepcopy(sim.FileIO['outdir'])
-    useSpectrum = deepcopy(sim.Source['useSpectrum'])
+    usePowerLawSpectrum = deepcopy(sim.Source['usePowerLawSpectrum'])
+    muparserSpectrum = deepcopy(sim.Source['muparserSpectrum'])
     weights = deepcopy(sim.weights)
     outtype = deepcopy(sim.Simulation.get('outputtype', 'ascii'))
     if config['Observer']['obsElectrons'] is False:
@@ -243,7 +244,8 @@ if __name__ == '__main__':
         col.convertOutput2Hdf5(names, units, ph_data, weights, ph_hfile, config,
                   pvec_id = ['','0'],
                   xvec_id = ['','0'],
-                  useSpectrum = useSpectrum,
+                  usePowerLawSpectrum = usePowerLawSpectrum,
+                  muparserSpectrum = muparserSpectrum,
                   use_np=use_np)
 
         #utils.zipfiles(sim.outputfile,sim.outputfile + '.gz', nodir = True)
@@ -283,7 +285,8 @@ if __name__ == '__main__':
                 col.convertOutput2Hdf5(names, units, e_data, weights, e_hfile, config,
                         pvec_id = ['','0'],
                         xvec_id = ['','0'],
-                        useSpectrum = useSpectrum)
+                        usePowerLawSpectrum = usePowerLawSpectrum,
+                        muparserSpectrum = muparserSpectrum)
 
                 utils.copy2scratch(e_hfile, e_outdir)
 

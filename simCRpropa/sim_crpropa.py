@@ -336,7 +336,7 @@ class SimCRPropa(object):
             raise ValueError("Unknown EBL model chosen")
         self._URB = URB_Protheroe96
 
-        if self.Source['useSpectrum']:
+        if self.Source['usePowerLawSpectrum'] or self.Source['muparserSpectrum'] is not False:
             self.nbins = 1
             self.weights = [self.Simulation['Nbatch']]
         # do a bin-by-bin analysis
@@ -410,13 +410,12 @@ class SimCRPropa(object):
             self.PhotonOutName = f'casc_{jobid:05d}.hdf5'
         else:
             raise ValueError("unknown output type chosen")
-
         self.Source['th_jet'] = self._th_jetList[it]
         self.Source['z'] = self._zList[iz]
         self.D = redshift2ComovingDistance(self.Source['z']) # comoving source distance
 
         # append options to file path
-        self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['basedir'],
+        self.FileIO['outdir'] = utils.mkdir(path.join(f"{self.FileIO['basedir']}",
                                 f"z{self.Source['z']:.3f}"))
         if self.Source['source_morphology'] == 'cone':
             self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
@@ -431,8 +430,15 @@ class SimCRPropa(object):
             raise ValueError("Chosen source morphology not supported.")
         self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
                         f"th_obs{self.Observer['obsAngle']}/"))
-        self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
-                        f"spec{self.Source['useSpectrum']:d}/"))
+        if self.Source['usePowerLawSpectrum']:
+            self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
+                        f"inj_powlaw{self.Source['index']}/"))
+        elif self.Source['muparserSpectrum'] is not False:
+            self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
+                        f"inj_powlaw{self.Source['index']}_expcut{self.Source['cutoff']}TeV/"))
+        else:
+            self.FileIO['outdir'] = utils.mkdir(path.join(self.FileIO['outdir'],
+                        f"inj_mono{self.Source['Energy']:.2e}eV/"))
 
         # This is read from a loop
         self.Bfield['B'] = self._bList[idB]
@@ -742,17 +748,28 @@ class SimCRPropa(object):
         # nu_mu : 14
         # nu_tau : 16
         # proton: 2212
-        if self.Source['useSpectrum']:
+        if self.Source['usePowerLawSpectrum'] and self.Source['muparserSpectrum'] is not False:
+            raise ValueError(f"Cannot use both powerlaw and muparser spectrum simultaneously. Choose one. Check `usePowerLawSpectrum` and `muparserSpectrum options` in config; only one should be False.")
+        elif self.Source['usePowerLawSpectrum']:
             # for a power law use SourcePowerLawSpectrum (double Emin, double Emax, double index)
             logging.info(f"Using power spectrum E^{self.Source['index']}")
             self.source.add(SourcePowerLawSpectrum(self.Source['Emin'] * eV, 
                                                    self.Source['Emax'] * eV, 
                                                    self.Source['index']))
+            self.source.add(SourceParticleType(self.Source['Composition']))
+        elif self.Source['muparserSpectrum'] is not False:
+            muspec = self.Source['muparserSpectrum'].format(self.Source)
+            logging.info(f'Spectrum: {muspec}')
+            genericSourceComposition = SourceGenericComposition(self.Source['Emin'] * eV, 
+                                                               self.Source['Emax'] * eV, 
+                                                               muspec)
+            genericSourceComposition.add(self.Source['Composition'], 1)
+            self.source.add(genericSourceComposition)
         else:
-        # mono-energetic particle:
+            logging.info(f'Injecting mono-energetic particles at {self.Source["Energy"]} eV')
+            # mono-energetic particle:
             self.source.add(SourceEnergy(self.Source['Energy'] * eV))
-        self.source.add(SourceParticleType(self.Source['Composition']))
-
+            self.source.add(SourceParticleType(self.Source['Composition']))
 
         logging.info('source initialized')
         return

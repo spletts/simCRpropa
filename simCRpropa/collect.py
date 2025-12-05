@@ -71,7 +71,7 @@ def combine_output(outfile, overwrite = False):
         elif isinstance(conf['Source']['Emin'], Iterable):
             esteps = len(conf['Source']['Emin'])
 
-        if not conf['Source']['useSpectrum']:
+        if conf['Source']['usePowerLawSpectrum'] is False and conf['Source']['muparserSpectrum'] is False:
             for name in f['simEM']:                                                                        
                 # check if number of bins is correct
                 if not 'weights' in f['simEM'][name].keys():
@@ -129,7 +129,7 @@ def combine_output(outfile, overwrite = False):
             continue
         for name in f['simEM']:                                                                        
             # we have simulated a spectrum
-            if conf['Source']['useSpectrum']:
+            if conf['Source']['usePowerLawSpectrum'] or conf['Source']['muparserSpectrum'] is not False:
                 k = 'simEM/' + name  
                 if name == 'intspec':
                     continue
@@ -215,7 +215,8 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
               config,
               pvec_id = [''],
               xvec_id = [''],
-              useSpectrum = False,
+              usePowerLawSpectrum=False,
+              muparserSpectrum=False,
               use_np=False):
     """
     Convert CRPropa Output to an HDF5 file
@@ -249,7 +250,7 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
         list of strings that will be appended to position
         columns which will be turned into vector columns.
 
-    useSpectrum: bool
+    usePowerLawSpectrum: bool
         if False, assume bin-by-bin simulation (default: False)
     """
     # stack vectors together:
@@ -307,7 +308,7 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
                 # dtype = 'f16' # 'f8'
                 dtype = 'f8'
 
-        if not useSpectrum:
+        if usePowerLawSpectrum is False and muparserSpectrum is False:
             if isinstance(config['Source']['Emin'], float):
                 EeVbins = np.logspace(np.log10(config['Source']['Emin']),
                     np.log10(config['Source']['Emax']), config['Source']['Esteps'])
@@ -349,7 +350,7 @@ def convertOutput2Hdf5(names, units, data, weights, hfile,
             grp[n].attrs['unit'] = units[n]
 
     intspec = grp.create_group("intspec")
-    if not useSpectrum:
+    if usePowerLawSpectrum is False and muparserSpectrum is False:
         intspec.create_dataset("Ecen", data = Ecen,
             compression="gzip" ) 
         intspec["Ecen"].attrs['unit'] = 'eV'

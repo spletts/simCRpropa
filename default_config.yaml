@@ -77,7 +77,7 @@ Source:
     #   - 'cone' (crpropa.SourceEmissionCone), 
     #   - 'iso' (crpropa.SourceIsotropicEmission), 
     #   - 'dir' (crpropa.SourceDirection).
-    # If the direction of the source emission (if using `source_morphology=cone` or `source_morphology=dir`) is set by x=cos(`obsAngle`), y=sin(`obsAngle`), z=0.
+    # The direction of the source emission (if using `source_morphology=cone` or `source_morphology=dir`) is set by x=cos(`obsAngle`), y=sin(`obsAngle`), z=0.
     # The source is placed at (`obsPosX`, `obsPosY`, `obsPosZ`).
     source_morphology: cone
 
@@ -86,14 +86,28 @@ Source:
     # This is the full opening angle; aperture; not measured from x-axis
     th_jet: 0.1
 
-    # If True, injects/simulates a *powerlaw* spectrum with `index` frrom `Emin` to `Emax`. If False, injects delta function with energy `Energy`
-    useSpectrum: True 
+    # If True (and `muparserSpectrum` is not False), injects/simulates a *powerlaw* spectrum with `index` from `Emin` to `Emax`. 
+    # If False AND `muparserSpectrum` is False, injects mono-energetic particles at energy `Energy`.
+    usePowerLawSpectrum: False 
 
-    # Minimum energy (in eV) of injected particles. Used if `useSpectrum=True`.
+    # This is ignored if it is False. If it is not False, this is used to set the injected spectrum; ensure that `index` and `cutoff` parameters are set below.
+    # The injected spectrum is set by this expression, which is parsed by muparser. See CRPropa's SourceGenericComposition class for details. 
+    # This was made with the intent of only ever injecting a powerlaw with exponential cutoff from `Emin` to `Emax` via:
+    #  muparserSpectrum: "E^{0[index]:.2f}*exp(-E/({0[cutoff]:.2f} * TeV))"
+    # so the parameters for `index` and `cutoff` are to be set in this Source section of the yaml file,
+    # so that these parameters can be appended to the output filename (in sim_crpropa.py) 
+    # to ensure that results are not overwritten.
+    # If False AND `usePowerLawSpectrum` is False, injects mono-energetic particles at energy `Energy`.
+    muparserSpectrum: "E^{0[index]:.2f}*exp(-E/({0[cutoff]:.2f} * TeV))"
+
+    # This is only used if `muparserSpectrum` is not False. It is the cutoff energy in *TeV*
+    cutoff: 1.0
+
+    # Minimum energy (in eV) of injected particles. Used if `usePowerLawSpectrum=True` or `usemuparserSpectrum` is not False.
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
     Emin: 1.e+8  # 100 MeV (Fermi-LAT lower energy range)
 
-    # Maximum energy (in eV) of injected particles. Used if `useSpectrum=True`.
+    # Maximum energy (in eV) of injected particles. Used if `usePowerLawSpectrum=True` or `usemuparserSpectrum` is not False.
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
     Emax: 20.e+12 
 
@@ -105,11 +119,8 @@ Source:
     Composition: 22  # Photons 
 
     # Below are not in use by me, and set to None to confirm.
-    Energy: None  # Energy of single particle (in eV), for mono-energetic injections. Used if `useSpectrum=False`.
-    Esteps: None  # TODO. Used if `useSpectrum=False`? Not used when running `run_crpropa_em_cascade.py` with settings in this config.
-    Spectrum: None  # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. "E^{0[index]:.3f}*exp(-E/({0[cutoff]:.2f} * TeV))"
-    cutoff: None # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. Cutoff energy in TeV
-
+    Energy: None  
+    Esteps: None 
 
 Observer:
     # The source is placed at (`obsPosX`, `obsPosY`, `obsPosZ`).
