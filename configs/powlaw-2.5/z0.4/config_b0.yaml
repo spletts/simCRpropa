@@ -1,6 +1,6 @@
 FileIO:
-    outdir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/inj_powlaw
-    basedir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/inj_powlaw
+    outdir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/
+    basedir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/
 
 
 Cosmology:
@@ -10,6 +10,7 @@ Cosmology:
 
 
 Simulation:
+
     # Number of particles simulated/injected
     # MUST be formatted as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
     Nbatch: 1.e+3 
@@ -50,7 +51,7 @@ Simulation:
     # If True, simulations includes synchrotron radiation interactions / energy losses etc
     include_sync: True
 
-    # "Updates redshift and applies adiabatic energy loss according to the traveled distance.""
+    # "Updates (??) redshift and applies adiabatic energy loss according to the traveled distance.""
     # https://crpropa.github.io/CRPropa3/api/classcrpropa_1_1FutureRedshift.html#class-futureredshift
     include_z_evol: True
 
@@ -85,7 +86,10 @@ Source:
     th_jet: 0.1
 
     # If True, injects/simulates a *powerlaw* spectrum with `index` frrom `Emin` to `Emax`. If False, injects delta function with energy `Energy`
-    useSpectrum: True 
+    usePowerLawSpectrum: True 
+
+    muparserSpectrum: False
+    cutoff: None
 
     # Minimum energy (in eV) of injected particles. Used if `useSpectrum=True`.
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
@@ -96,7 +100,7 @@ Source:
     Emax: 20.e+12 
 
     # Index of powerlaw for injected particles. Used if `useSpectrum=True`. 
-    index: -1.5 
+    index: -2.5
 
      # Particle ID for injected particles. 22 is photons. 
      # Other PIDs: https://crpropa.github.io/CRPropa3/pages/Basic-concepts.html#particle-id.
@@ -105,8 +109,6 @@ Source:
     # Below are not in use by me, and set to None to confirm.
     Energy: None  # Energy of single particle (in eV), for mono-energetic injections. Used if `useSpectrum=False`.
     Esteps: None  # TODO. Used if `useSpectrum=False`? Not used when running `run_crpropa_em_cascade.py` with settings in this config.
-    Spectrum: None  # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. "E^{0[index]:.3f}*exp(-E/({0[cutoff]:.2f} * TeV))"
-    cutoff: None # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. Cutoff energy in TeV
 
 
 Observer:
@@ -168,7 +170,7 @@ Bfield:
     cell:
         # Fixed amplitude (in Gauss) for B field
         # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-        B: 1.e-13
+        B: 0.0
         # Side length of each side of each grid cell (in Mpc)
         # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
         # MUST be a float not int

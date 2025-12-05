@@ -10,6 +10,7 @@ Cosmology:
 
 
 Simulation:
+
     # Number of particles simulated/injected
     # MUST be formatted as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
     Nbatch: 1.e+3 
@@ -57,7 +58,7 @@ Simulation:
     # Thinning = 0 tracks all particles
     thinning: 0.
 
-    CandidateTagColumn : True 
+    CandidateTagColumn : True
 
     # Below are not in use by me, and set to None to confirm.
     cpu_n: None  # Does nothing seemingly. Set this in slurm script?
@@ -69,7 +70,7 @@ Source:
     # Source redshift. 
     # The comoving distance D is calculated with this redshift.
     # D is used as the radius of the large observer sphere. 
-    z: 0.1
+    z: 0.4
 
     # Source shape / crpropaclass
     # Options: 
@@ -85,7 +86,10 @@ Source:
     th_jet: 0.1
 
     # If True, injects/simulates a *powerlaw* spectrum with `index` frrom `Emin` to `Emax`. If False, injects delta function with energy `Energy`
-    useSpectrum: True 
+    usePowerLawSpectrum: True 
+
+    usemuparserSpectrum: False
+    cutoff: None
 
     # Minimum energy (in eV) of injected particles. Used if `useSpectrum=True`.
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
@@ -105,9 +109,7 @@ Source:
     # Below are not in use by me, and set to None to confirm.
     Energy: None  # Energy of single particle (in eV), for mono-energetic injections. Used if `useSpectrum=False`.
     Esteps: None  # TODO. Used if `useSpectrum=False`? Not used when running `run_crpropa_em_cascade.py` with settings in this config.
-    Spectrum: None  # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. "E^{0[index]:.3f}*exp(-E/({0[cutoff]:.2f} * TeV))"
-    cutoff: None # TODO: This is not used when running `run_crpropa_em_cascade.py` with settings in this config.. Perhaps used in later analysis for reweighted mono-energetic injections. Cutoff energy in TeV
-
+   
 
 Observer:
     # The source is placed at (`obsPosX`, `obsPosY`, `obsPosZ`).
@@ -144,7 +146,7 @@ BreakConditions:
     # Redshift 0.4 has comoving distance 1542.965551541961 Mpc for cosmology h=0.71, Om=0.27 -> 2314.4483273129415 Mpc
     # Redshift 0.7 has comoving distance 2505.305512656977 Mpc for cosmology h=0.71, Om=0.27 -> 3757.9582689854655 Mpc
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-    Dmax: 620.2
+    Dmax: 2314.0
 
     # Particles below `Emin` (in eV) are no longer traced
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
@@ -159,35 +161,22 @@ Bfield:
     # Options:
     #   - cell (fixed magnitude `B` with random unit vector direction in each grid cell)
     #   - turbulence (turbulent field...)
-    #   - geo
-    type: geo
+    #   - txt (magnetic field values specific by a text file `fnTxt` and grid by `....`)
+    type: cell
 
     b_void: 0.0
 
-    # Only read if `type=geo`
-    geo:
+    # Only read if `type=cell`
+    cell:
         # Fixed amplitude (in Gauss) for B field
         # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
-        B: 1.e-13
+        B: 0.0
         # Side length of each side of each grid cell (in Mpc)
         # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
-        # Must be a float?
-        gridSpacing: 50.0
+        # MUST be a float not int
+        gridSpacing: 50.
         # Seed for random direction of B field
         seed: 2541004132
-        # Description which will be used in output directory name
-        # In addition, this MUST have a matching key and function in sim_crpropa.py
-        # Options:
-        #   - outer_sphere TODO
-        #       Outer spherical shell (near observer) has B=/=0, and inner shell (near source) has B=0
-        #   - inner_sphere TODO
-        #       Inner spherical shell has B=/=0, and outer shell has B=0
-        #   - outer_rectangular_prism
-        #       Outer rectangular prism (near observer) has B=/=0, and inner (near source) has B=0
-        #   - inner_rectangular_prism
-        #       Inner rectangular prism (near observer) has B=/=0, and outer (near source) has B=0
-        descriptor: outer_rectangular_prism
-        reflective: True
 
     # CRPropa EBL class/model to use
     EBL: IRB_Saldana21
