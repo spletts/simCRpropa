@@ -1,6 +1,6 @@
 FileIO:
-    outdir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/tests
-    basedir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/tests
+    outdir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/test
+    basedir: /hb/home/mspletts/simCRPropaVoids/simCRpropa/output/test
 
 
 Cosmology:
@@ -12,6 +12,7 @@ Cosmology:
 Simulation:
     # Number of particles simulated/injected
     # MUST be formatted as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    # 1.e+3 is a decent choice. This is currently set to 1.e+2 for testing purposes to ensure a quick simulation.
     Nbatch: 1.e+2
 
     # Tolerance; numerical precision. 
@@ -31,7 +32,8 @@ Simulation:
     minStepLength: 0.3  # pc; paper says "set the minimum step length of the simulation such that time delays t down to 1 yr can be resolved" x=ct
 
     # Maximum step length (in *Mpc*). Used in solver for equations of motion for a charged particle in a magnetic field.
-    maxStepLength: 1.0
+    # This is set to the smallest expected interaction length among all included interactions / modules.
+    maxStepLength: 0.001
 
     # If True, simulations includes CMB as a background field to modules/interactions
     include_CMB: True
@@ -62,7 +64,7 @@ Simulation:
 
     # Below are not in use by me, and set to None to confirm.
     cpu_n: None  # Does nothing seemingly. Set this in slurm script?
-    multiplicity: 1  # Number of times `Nbatch` particles are simulated. Does nothing in my configurations. I think this is used if there is a list of magnetic fields (`B` keys)
+    multiplicity: None  # Number of times `Nbatch` particles are simulated. Does nothing in my configurations. I think this is used if there is a list of magnetic fields (`B` keys)
     emcasc: None  # Used if the injected spectrum is a CR (not photon) spectrum. If injecting a photon spectrum, the EM cascade is setup in a separate function.
 
 
@@ -81,14 +83,14 @@ Source:
     # The source is placed at (`obsPosX`, `obsPosY`, `obsPosZ`).
     source_morphology: cone
 
-    # If `source_morphology=cone` this is the jet opening angle (in degrees). If `source_morphology!=cone` this is not used in setting up the source.
+    # If `source_morphology=cone` this is the jet half-opening angle (in degrees). If `source_morphology!=cone` this is not used in setting up the source.
     # NOTE THIS IS ALSO IN `Observer` SECTION, but only this one appears to be used.
-    # This is the full opening angle; aperture; not measured from x-axis
+    # *Half*-opening angle
     th_jet: 0.1
 
     # If True (and `muparserSpectrum` is not False), injects/simulates a *powerlaw* spectrum with `index` from `Emin` to `Emax`. 
     # If False AND `muparserSpectrum` is False, injects mono-energetic particles at energy `Energy`.
-    usePowerLawSpectrum: False 
+    usePowerLawSpectrum: True 
 
     # This is ignored if it is False. If it is not False, this is used to set the injected spectrum; ensure that `index` and `cutoff` parameters are set below.
     # The injected spectrum is set by this expression, which is parsed by muparser. See CRPropa's SourceGenericComposition class for details. 
@@ -98,10 +100,10 @@ Source:
     # so that these parameters can be appended to the output filename (in sim_crpropa.py) 
     # to ensure that results are not overwritten.
     # If False AND `usePowerLawSpectrum` is False, injects mono-energetic particles at energy `Energy`.
-    muparserSpectrum: "E^{0[index]:.2f}*exp(-E/({0[cutoff]:.2f} * TeV))"
+    muparserSpectrum: False
 
     # This is only used if `muparserSpectrum` is not False. It is the cutoff energy in *TeV*
-    cutoff: 1.0
+    cutoff: None
 
     # Minimum energy (in eV) of injected particles. Used if `usePowerLawSpectrum=True` or `usemuparserSpectrum` is not False.
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
@@ -114,8 +116,8 @@ Source:
     # Index of powerlaw for injected particles. Used if `useSpectrum=True`. 
     index: -1.5 
 
-     # Particle ID for injected particles. 22 is photons. 
-     # Other PIDs: https://crpropa.github.io/CRPropa3/pages/Basic-concepts.html#particle-id.
+    # Particle ID for injected particles. 22 is photons. 
+    # Other PIDs: https://crpropa.github.io/CRPropa3/pages/Basic-concepts.html#particle-id.
     Composition: 22  # Photons 
 
     # Below are not in use by me, and set to None to confirm.
@@ -132,8 +134,10 @@ Observer:
     # The direction of the source emission (if using `source_morphology=cone` or `source_morphology: dir`) is set by x=cos(`obsAngle`), y=sin(`obsAngle`), z=0.
     obsAngle: 0.
 
+    # Keeping the default value here ...
     # Minimum redshift for detection ~ 14 Mpc
     # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
+    # In this package, this number is multipled by -1: `self.m.add(MinimumRedshift(-1. * self.Observer['zmin']))`
     zmin: 1.e-3
 
     # Large sphere observer framework: observer is a spherical surface with radius equal to comoving distance of source at redshift `z`.
@@ -143,6 +147,7 @@ Observer:
     # If True, also observes electrons by adding another observer (same setup/spherical-surface as photon observer).
     # The electron observer vetos photons.
     # If False, only photons are observed, and the photon observer vetos electrons.
+    # NOTE: has not been tested recently.
     obsElectrons: False
 
     # Does not appear to be used. Instead, `th_jet` from `Source` is used.
@@ -173,7 +178,7 @@ Bfield:
     #   - cell (fixed magnitude `B` with random unit vector direction in each grid cell)
     #   - turbulence (turbulent field...)
     #   - geo (magnetic field values with some geometry e.g. sphere, rectangular prism, etc)
-    type: geo
+    type: cell
 
     # Magnetic field in voids in Gauss
     b_void: 0.0
@@ -181,7 +186,7 @@ Bfield:
 
     # Only read if `type=cell`
     cell:
-        # Fixed amplitude (in Gauss) for B field
+        # Fixed amplitude (in Gauss) for B field. Amplitude is fixed at each grid point. The grid points are interpolated.
         # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
         B: 1.e-13
         # Side length of each side of each grid cell (in Mpc)
@@ -190,7 +195,7 @@ Bfield:
         # Seed for random direction of B field
         seed: 2541004132 
 
-     # Only read if `type=geo`
+    # Only read if `type=geo`
     geo:
         # Fixed amplitude (in Gauss) for B field
         # Format as 1.e+3 rather than 1e+3 or 1e3 or 1.e3
@@ -204,19 +209,20 @@ Bfield:
         # Description which will be used in output directory name
         # In addition, this MUST have a matching key and function in sim_crpropa.py
         # Options:
-        #   - outer_sphere TODO
+        #   - outer_sphere TODO?
         #       Outer spherical shell (near observer) has B=/=0, and inner shell (near source) has B=0
-        #   - inner_sphere TODO
+        #   - inner_sphere TODO?
         #       Inner spherical shell has B=/=0, and outer shell has B=0
         #   - outer_rectangular_prism
-        #       Outer rectangular prism (near observer) has B=/=0, and inner (near source) has B=0
+        #       Outer rectangular prism filled (near observer) has B=/=0, and inner (near source) has B=0
         #   - inner_rectangular_prism
-        #       Inner rectangular prism (near observer) has B=/=0, and outer (near source) has B=0
+        #       Inner rectangular prism filled (near observer) has B=/=0, and outer (near source) has B=0
         descriptor: inner_rectangular_prism
         reflective: True
 
        
     # Only read if `type=turbulent`
+    # NOTE. I have not used this option recently.
     turbulence:
         B:
         gridSpacing:
