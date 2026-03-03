@@ -85,6 +85,10 @@ def init_sdf(local_id=0):
         list(os.environ.keys()).index("SLURM_JOB_NAME")
         job_id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         tmpdir = os.environ["LSCRATCH"]
+        # Make this directory (including top level directories if necessary) if it doesn't exist
+        if not os.path.exists(tmpdir):
+            os.makedirs(tmpdir)
+            logging.info(f"Created tmpdir {tmpdir}")
         logging.info(f'os.listdir: {os.listdir(tmpdir)}')
 
         time.sleep(1.)
