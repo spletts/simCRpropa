@@ -184,6 +184,14 @@ Bfield:
     b_void: 0.0
     # b_void: 1.e-20
 
+    # *Additional* scaling of the magnetic field on the comoving grid via: B_comoving(z) = B(z=0) * (1+z)^evolution_m. 
+    # The *total* magnetic field scaling is: B(z) = B_comoving(z) * (1+z)^2 = B(z=0) * (1+z)^evolution_m * (1+z)^2, where the (1+z)^2 is the default scaling of the magnetic field with redshift in CRPropa
+    # In order to create B independent of redshift, set `evolution_m: -2.0`.
+    # See Section 3.5 of https://iopscience.iop.org/article/10.1088/1475-7516/2016/05/038
+    # To *not* apply addtional scaling, set `evolution_m: False` or `evolution_m: 0.0`. This key is ignored if `evolution_m` is False.
+    # This is used in the `cell` and `geo` options, but not in the `turbulence` option.
+    evolution_m: False
+
     # Only read if `type=cell`
     cell:
         # Fixed amplitude (in Gauss) for B field. Amplitude is fixed at each grid point. The grid points are interpolated.
@@ -193,7 +201,7 @@ Bfield:
         # The number of grid cells is determined using `gridSpacing` and the comoving distance to the source
         gridSpacing: 50.0
         # Seed for random direction of B field
-        seed: 2541004132 
+        seed: 538478569 # 2541004132 
 
     # Only read if `type=geo`
     geo:
@@ -205,7 +213,7 @@ Bfield:
         # Must be a float?
         gridSpacing: 50.0
         # Seed for random direction of B field
-        seed: 2541004132 
+        seed: 538478569 # 2541004132 
         # Description which will be used in output directory name
         # In addition, this MUST have a matching key and function in sim_crpropa.py
         # Options:
