@@ -6,7 +6,7 @@
 #SBATCH --output=output/test/sample_slurm.log  # Standard output and error log
 #SBATCH --mem=1G                    
 #SBATCH --array=0-1
-#SBATCH --partition=128x24
+#SBATCH --partition=windfall
 
 echo "Config file used:"
 echo $1
