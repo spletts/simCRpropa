@@ -72,12 +72,6 @@ def init_rectangular_prism_bfield(
         Magnetic field outside/exterior to voids, in Gauss.
     seed : int
         Seed for random direction of magnetic field at each grid point.
-    gridSpacingMpc : float or int?
-        Side length of each individual grid cell, in Mpc
-    num_pad_cell : int
-    even_grid : bool
-    h : float
-    Om : float
 
     Returns
     -------
@@ -127,6 +121,9 @@ def init_rectangular_prism_bfield(
                         vect3d.x = b_void * x / d
                         vect3d.y = b_void * y / d
                         vect3d.z = b_void * z / d
+    msg = 'Grid done'
+    print(msg)
+    logging.info(msg)
 
     return None
 
@@ -339,7 +336,7 @@ class SimCRPropa(object):
             self._EBL = IRB_Saldana21
         else:
             raise ValueError("Unknown EBL model chosen")
-        self._URB = URB_Protheroe96
+        self._URB = URB_Nitu21 # URB_Protheroe96
 
         if self.Source['usePowerLawSpectrum'] or self.Source['muparserSpectrum'] is not False:
             self.nbins = 1
@@ -857,6 +854,20 @@ class SimCRPropa(object):
                 empp_ebl = EMPairProduction(self._EBL(), True, thinning)
                 empp_ebl.setInteractionTag("0")
                 self.m.add(empp_ebl)
+            """Radio bkg"""
+            emic_urb = EMInverseComptonScattering(self._URB(), True, thinning)
+            emic_urb.setInteractionTag("0")
+            empp_urb = EMPairProduction(self._URB(), True, thinning)
+            empp_urb.setInteractionTag("0")
+            self.m.add(emic_urb)
+            self.m.add(empp_urb)
+            if self.Simulation['include_higher_order_pp']:
+                emdpp_urb = EMDoublePairProduction(self._URB(), True, thinning)
+                emdpp_urb.setInteractionTag("0")
+                emtpp_urb = EMTripletPairProduction(self._URB(), True, thinning)
+                emtpp_urb.setInteractionTag("0")
+                self.m.add(emdpp_urb)
+                self.m.add(emtpp_urb)
 
             if self.Simulation['include_higher_order_pp']:
                 emdpp_ebl = EMDoublePairProduction(self._EBL(), True, thinning)
