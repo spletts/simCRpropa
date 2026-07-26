@@ -190,7 +190,7 @@ Bfield:
     # See Section 3.5 of https://iopscience.iop.org/article/10.1088/1475-7516/2016/05/038
     # To *not* apply addtional scaling, set `evolution_m: False` or `evolution_m: 0.0`. This key is ignored if `evolution_m` is False.
     # This is used in the `cell` and `geo` options, but not in the `turbulence` option.
-    evolution_m: False
+    evolution_m: -2
 
     # Only read if `type=cell`
     cell:
